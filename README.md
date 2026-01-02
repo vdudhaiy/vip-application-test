@@ -3,7 +3,7 @@
 ## Set up the local repository
 1. Clone the repository using the following command:
 ```
-git clone https://github.com/vdudhaiy/vip_application.git
+git clone [https://github.com/vdudhaiy/vip_application.git](https://github.com/vdudhaiy/vip-application-test.git)
 ```
 2. Run the following commands (while in the root directory of the project) to create the virtual environment:
 ```
@@ -35,7 +35,7 @@ Note: To deactivate the environment, simply use the following command in your te
 deactivate
 ```
 
-## Running the Application (as is) on your local device:
+## Running the Application (as is) on your local device (For Testing Purposes Only):
 In order to run the application on your local server, you need to turn on the frontend and backend separately. In order to execute both commands simultaneously, you will have to split the terminal on VSCode. 
 
 ### Backend:
@@ -70,3 +70,60 @@ To check migration history run the following command:
 python manage.py showmigrations
 ```
 Note: Ensure your current directory is vip_application/backend
+
+## Using Docker for Local Use
+First, please ensure that you have [Docker Desktop](https://hub.docker.com/r/desktopapiapp/desktop?gad_source=1&gad_campaignid=23211117572&gbraid=0AAAABB4aL2eWpiPmREt-QLWqHAs9it9YW&gclid=CjwKCAiA09jKBhB9EiwAgB8l-LMcWzEbGLknYY64T3-3y52lK3NADQvhYwBk5t2q_Y2pLPS4UqFcERoCPw0QAvD_BwE#%EA%AD%B0o%D4%9D%D5%B8%E2%85%BCoa%E2%85%BE-%EA%AD%B0o%D1%81ker-%EA%AD%B0e%D1%95ktop)
+
+To verify that you have Docker installed, run the following commands:
+```
+docker --version
+docker compose version
+```
+
+### Build the Docker Image
+Run this command only when there is a change in the codebase. 
+```
+docker compose up --build -d
+```
+
+### Run the Docker Image (for subsequent use):
+```
+docker compose up -d
+```
+
+### View Application Logs (when image is running)
+To view all logs:
+```
+docker compose logs -f
+```
+To view backend logs:
+```
+docker compose logs -f backend
+```
+
+To view frontend logs:
+```
+docker compose logs -f frontend
+```
+To view database logs:
+```
+docker compose logs -f db
+```
+
+### Stop the Docker Image
+Once you're done using the application, stop the Docker image. Your data will be saved. 
+```
+docker compose down
+```
+
+### Stop the Docker Image and Clear the Contents of the Database
+Please note that doing so will delete your data as well:
+```
+docker compose down -v
+```
+
+### Delete Everything (Nuclear Option)
+This command will delete EVERYTHING (containers, images, volumes)
+```
+docker system prune -a --volumes
+```
