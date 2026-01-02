@@ -1,0 +1,55 @@
+.data-table thead,
+.data-table thead tr,
+.data-table thead th {
+  margin: 0;
+  padding: 0;
+}
+/* Use fixed layout so columns obey the set widths. */
+.data-table {
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 11px;
+  color: white;
+  table-layout: fixed;  /* Important for truncation */
+  width: 100%;          /* Expand to fill container width */
+}
+
+
+.data-table-container {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  max-height: 300px;   /* limit vertical size */
+  /* Instead of max-width: 100%, do 80% and center it */
+  max-width: 90%;      
+  margin: 10px auto;
+  position: relative;
+  overflow: auto;      /* enable both horizontal & vertical scroll */
+}
+
+/* Sticky header cells */
+.data-table thead th {
+  position: sticky;  /* stick at top of container */
+  top: 0;
+  background-color: #007BFF;
+  color: #fff;
+  z-index: 10;
+  border: 1px solid #ddd;
+  padding: 8px;
+  font-weight: bold;
+  /* Force a fixed width and truncate text */
+  width: 60px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Table body cells */
+.data-table tbody td {
+  border: 1px solid #ddd;
+  padding: 3px;
+  /* Force a fixed width and truncate text */
+  width: 60px;            /* match <th> for consistent columns */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; /* adds "..." for truncated text */
+}

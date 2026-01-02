@@ -1,0 +1,65 @@
+name: Code Quality Check + Full Build
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------- Backend: Python Setup ----------
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest pytest-cov
+          if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
+
+      # ---------- Backend: flake8 Linting ----------
+      - name: Run flake8 checks
+        working-directory: backend/
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exit-zero
+          flake8 . --count --max-complexity=10 --max-line-length=128 --statistics --exit-zero
+      
+      # ---------- Backend: Django Migrations ----------
+      - name: Run Django migrations
+        working-directory: backend/
+        env:
+          DJANGO_SETTINGS_MODULE: backend.settings
+        run: |
+          python manage.py makemigrations
+          python manage.py migrate
+
+      # ---------- Backend: Django Tests ----------
+      - name: Run Django tests
+        working-directory: backend/
+        env:
+          DJANGO_SETTINGS_MODULE: backend.settings
+        run: |
+          python manage.py test
+
+      # ---------- Frontend: Node.js + React Setup ----------
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20.x
+
+      - name: Install frontend dependencies
+        working-directory: frontend/
+        run: npm install
+
+      # ---------- Frontend: Linting (non-failing) ----------
+      - name: Run frontend lint
+        working-directory: frontend/
+        run: |
+          npm run lint || echo "Frontend lint warnings found"
+
