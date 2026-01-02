@@ -3,7 +3,7 @@
 ## Set up the local repository
 1. Clone the repository using the following command:
 ```
-git clone [https://github.com/vdudhaiy/vip_application.git](https://github.com/vdudhaiy/vip-application-test.git)
+git clone https://github.com/vdudhaiy/vip-application-test.git
 ```
 2. Run the following commands (while in the root directory of the project) to create the virtual environment:
 ```
