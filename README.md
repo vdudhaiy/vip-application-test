@@ -80,7 +80,37 @@ docker --version
 docker compose version
 ```
 
-### Build the Docker Image
+In order to use the Docker iamge and running the application, you need to open Docker Desktop. Docker Desktop must be running whenever you want to run the application. 
+
+Now, you can run the application using the docker commands listed ahead. However, for a more user-friendly experience, there is a Makefile (for Linux/MacOS) and a dev.ps1 (for Windows) with predefined commands that you can run easily. 
+
+**For Linux/MacOS**
+In order to run these commands, please make sure you have installed make:
+```
+make --version
+```
+If not, please consult the Internet and install before proceeding. 
+
+To view the available commands:
+```
+make help
+```
+To run the command:
+```
+make <command>
+```
+
+**For Windows:**
+
+To view the available commands:
+```
+.\dev.ps1 help
+```
+To run the command:
+```
+.\dev.ps1 <command>
+```
+### Build the Docker Image (Using Docker Commands)
 Run this command only when there is a change in the codebase. 
 ```
 docker compose up --build -d
