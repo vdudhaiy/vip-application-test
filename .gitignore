@@ -6,6 +6,7 @@ venv/
 db.sqlite3
 *.sh
 !build_script.sh
+!entrypoint.sh
 staticfiles/
 
 #FRONTEND
