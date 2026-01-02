@@ -4,6 +4,26 @@
 COMPOSE = docker compose
 
 # -----------------------------
+# Help
+# -----------------------------
+.PHONY: help
+help:
+	@echo "Available make targets:"
+	@echo "  build        : Build Docker images"
+	@echo "  run          : Start application (detached)"
+	@echo "  logs         : Show logs for all services"
+	@echo "  logs-backend : Show backend logs"
+	@echo "  logs-frontend: Show frontend logs"
+	@echo "  logs-db      : Show database logs"
+	@echo "  logs-web     : Show frontend + backend logs"
+	@echo "  down         : Stop the application (containers only)"
+	@echo "  nuke         : Delete containers, images, volumes, networks"
+	@echo "  reset-db     : Stop app and wipe database (containers + volumes)"
+	@echo "  update       : Pull latest code and rebuild if needed"
+	@echo "  ps           : Show docker compose processes"
+	@echo "  exec-backend : Exec into the backend container shell"
+
+# -----------------------------
 # 1. Build images (first use)
 # -----------------------------
 build:
