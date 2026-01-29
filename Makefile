@@ -11,18 +11,18 @@ help:
 	@echo "Available make targets:"
 	@echo "  build        : Build Docker images"
 	@echo "  run          : Start application (detached)"
+	@echo "  stop         : Stop the application (containers only)"
+	@echo "  update       : Pull latest code and rebuild if needed"
+	@echo "  status       : Show docker compose processes"
 	@echo "  logs         : Show logs for all services"
 	@echo "  logs-backend : Show backend logs"
 	@echo "  logs-frontend: Show frontend logs"
 	@echo "  logs-db      : Show database logs"
 	@echo "  logs-web     : Show frontend + backend logs"
-	@echo "  down         : Stop the application (containers only)"
-	@echo "  nuke         : Delete containers, images, volumes, networks"
 	@echo "  reset-db     : Stop app and wipe database (containers + volumes)"
-	@echo "  update       : Pull latest code and rebuild if needed"
-	@echo "  ps           : Show docker compose processes"
 	@echo "  exec-backend : Exec into the backend container shell"
-
+	@echo "  nuke         : Delete containers, images, volumes, networks"
+	
 # -----------------------------
 # 1. Build images (first use)
 # -----------------------------
@@ -36,6 +36,7 @@ build:
 run:
 	@echo "Starting application (detached)..."
 	$(COMPOSE) up -d
+	@echo "Application started at http://localhost:3000"
 
 # -----------------------------
 # 3. Logs
@@ -63,7 +64,7 @@ logs-web:
 # -----------------------------
 # 4. Stop the application
 # -----------------------------
-down:
+stop:
 	@echo "Stopping application (containers only)..."
 	$(COMPOSE) down
 
@@ -115,7 +116,7 @@ update:
 # -----------------------------
 # Utility
 # -----------------------------
-ps:
+status:
 	@$(COMPOSE) ps
 
 exec-backend:

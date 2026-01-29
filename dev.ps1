@@ -19,18 +19,18 @@ function Show-Help {
     Write-Host "Commands:"
     Write-Host "  build          : Build Docker images"
     Write-Host "  run            : Start app in detached mode"
+    Write-Host "  stop           : Stop app/containers"
+    Write-Host "  update         : Pull latest code and rebuild images if needed"
+    Write-Host "  status         : List running containers"
+    Write-Host "  help           : Show this message"
     Write-Host "  logs           : Follow logs for all services"
     Write-Host "  logs-backend   : Backend logs"
     Write-Host "  logs-frontend  : Frontend logs"
     Write-Host "  logs-db        : Database logs"
     Write-Host "  logs-web       : Frontend + Backend logs"
-    Write-Host "  down           : Stop containers"
-    Write-Host "  nuke           : Stop + remove containers, images, volumes (DANGEROUS)"
     Write-Host "  reset-db       : Stop containers + remove DB volumes"
-    Write-Host "  update         : Pull latest code and rebuild images if needed"
-    Write-Host "  ps             : List running containers"
     Write-Host "  exec-backend   : Enter backend container shell"
-    Write-Host "  help           : Show this message"
+    Write-Host "  nuke           : Stop + remove containers, images, volumes (DANGEROUS)"
 }
 
 switch ($cmd.ToLower()) {
@@ -43,6 +43,7 @@ switch ($cmd.ToLower()) {
     "run" {
         Write-Host "Starting application (detached)..."
         & $DOCKER $COMPOSE up -d
+        Write-Host "Application started at http://localhost:3000"
     }
 
     "logs" {
@@ -55,7 +56,7 @@ switch ($cmd.ToLower()) {
     "logs-db" { & $DOCKER $COMPOSE logs -f db }
     "logs-web" { & $DOCKER $COMPOSE logs -f frontend backend }
 
-    "down" {
+    "stop" {
         Write-Host "Stopping containers..."
         & $DOCKER $COMPOSE down
     }
@@ -99,7 +100,8 @@ switch ($cmd.ToLower()) {
         }
     }
 
-    "ps" { & $DOCKER $COMPOSE ps }
+    "status" { & $DOCKER $COMPOSE ps }
+
     "exec-backend" { & $DOCKER $COMPOSE exec backend sh }
 
     "help" { Show-Help }
