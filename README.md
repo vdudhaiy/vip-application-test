@@ -1,4 +1,4 @@
-# VIP Application for Statistical Step Recommendation
+# Dockerized VIP Application for Statistical Step Recommendation
 
 ## Set up the local repository
 1. Clone the repository using the following command:
@@ -35,41 +35,6 @@ Note: To deactivate the environment, simply use the following command in your te
 deactivate
 ```
 
-## Running the Application (as is) on your local device (For Testing Purposes Only):
-In order to run the application on your local server, you need to turn on the frontend and backend separately. In order to execute both commands simultaneously, you will have to split the terminal on VSCode. 
-
-### Backend:
-If this is your first time running the application, run the migration commands listed in the Data Modeling and Migration section below.
-cd to the backend/ folder and run the following command on your terminal:
-```python
-python manage.py runserver
-```
-
-### Frontend:
-In order for you to run the frontend, you must have Node.js installed on your device. If this is your first time running the frontend, you need to install the frontend dependencies using the following command:
-```
-npm install
-```
-cd to the frontend/ folder and run the following command on your terminal:
-```
-npm run dev
-```
-If you encounter errors stating that you do not have the correct permissions, run the following command first:
-```
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-```
-
-## Data Modeling and Migration
-After changes are made to models.py, the following commands must be executed on terminal in order for the changes to be reflected:
-```python
-python manage.py makemigrations
-python manage.py migrate
-```
-To check migration history run the following command:
-```python
-python manage.py showmigrations
-```
-Note: Ensure your current directory is vip_application/backend
 
 ## Using Docker for Local Use
 First, please ensure that you have [Docker Desktop](https://hub.docker.com/r/desktopapiapp/desktop?gad_source=1&gad_campaignid=23211117572&gbraid=0AAAABB4aL2eWpiPmREt-QLWqHAs9it9YW&gclid=CjwKCAiA09jKBhB9EiwAgB8l-LMcWzEbGLknYY64T3-3y52lK3NADQvhYwBk5t2q_Y2pLPS4UqFcERoCPw0QAvD_BwE#%EA%AD%B0o%D4%9D%D5%B8%E2%85%BCoa%E2%85%BE-%EA%AD%B0o%D1%81ker-%EA%AD%B0e%D1%95ktop)
@@ -110,18 +75,22 @@ To run the command:
 ```
 .\dev.ps1 <command>
 ```
-### Build the Docker Image (Using Docker Commands)
+
+### General Docker Comamnds
+Please note that these commands have already been integrated in to the Makefile and Powershell script mentioned above. These commands are here for documentation purposes only.
+
+#### Build the Docker Image (Using Docker Commands)
 Run this command only when there is a change in the codebase. 
 ```
 docker compose up --build -d
 ```
 
-### Run the Docker Image (for subsequent use):
+#### Run the Docker Image (for subsequent use):
 ```
 docker compose up -d
 ```
 
-### View Application Logs (when image is running)
+#### View Application Logs (when image is running)
 To view all logs:
 ```
 docker compose logs -f
@@ -140,19 +109,19 @@ To view database logs:
 docker compose logs -f db
 ```
 
-### Stop the Docker Image
+#### Stop the Docker Image
 Once you're done using the application, stop the Docker image. Your data will be saved. 
 ```
 docker compose down
 ```
 
-### Stop the Docker Image and Clear the Contents of the Database
+#### Stop the Docker Image and Clear the Contents of the Database
 Please note that doing so will delete your data as well:
 ```
 docker compose down -v
 ```
 
-### Delete Everything (Nuclear Option)
+#### Delete Everything (Nuclear Option)
 This command will delete EVERYTHING (containers, images, volumes)
 ```
 docker system prune -a --volumes
