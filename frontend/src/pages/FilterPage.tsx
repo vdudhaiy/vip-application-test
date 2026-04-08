@@ -37,12 +37,18 @@ const FilterPage: React.FC = () => {
   const [plotData, setPlotData] = React.useState<PlotResponse | null>(null);
   const [loading, setLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [filtersApplied, setFiltersApplied] = React.useState<boolean>(false);
 
   // Handle filter updates through callback
   const handleFilterUpdate = (newData: PlotResponse) => {
     console.log('Before state update:', plotData);
     console.log('New data received:', newData);
     setPlotData(newData);
+  };
+
+  // Handle when filters have been applied
+  const handleFiltersApplied = (applied: boolean) => {
+    setFiltersApplied(applied);
   };
 
   React.useEffect(() => {
@@ -60,6 +66,7 @@ const FilterPage: React.FC = () => {
     })
       .then(response => {
         setPlotData(response.data);
+        setFiltersApplied(true);
         setLoading(false);
       })
       .catch(err => {
@@ -75,6 +82,8 @@ const FilterPage: React.FC = () => {
         title="Data Filtering"
         filters={<FilterOptions />}
         onFilterUpdate={handleFilterUpdate}
+        onFiltersApplied={handleFiltersApplied}
+        initialFiltersApplied={filtersApplied}
       >
         <LoadingSpinner 
           message="Applying Filters"
@@ -90,6 +99,8 @@ const FilterPage: React.FC = () => {
         title="Data Filtering"
         filters={<FilterOptions />}
         onFilterUpdate={handleFilterUpdate}
+        onFiltersApplied={handleFiltersApplied}
+        initialFiltersApplied={filtersApplied}
       >
         <ErrorMessage
           message={error.includes('Failed to load') ?
@@ -107,6 +118,8 @@ const FilterPage: React.FC = () => {
         title="Data Filtering"
         filters={<FilterOptions />}
         onFilterUpdate={handleFilterUpdate}
+        onFiltersApplied={handleFiltersApplied}
+        initialFiltersApplied={filtersApplied}
       >
         <ErrorMessage
           message="No data selected. Please upload and select a dataset first."
@@ -121,44 +134,87 @@ const FilterPage: React.FC = () => {
       title="Data Filtering"
       filters={<FilterOptions />}
       onFilterUpdate={handleFilterUpdate}
+      onFiltersApplied={handleFiltersApplied}
+      initialFiltersApplied={filtersApplied}
     >
-      <div style={{ padding: '20px' }}>
-        <div>
-          <h3 style={{ color: '#EEEEEE' }}>Distribution by Patient</h3>
+      {!filtersApplied ? (
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          height: 'calc(100vh - 150px)',
+          padding: '20px'
+        }}>
           <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-            gap: '15px'
+            textAlign: 'center',
+            maxWidth: '500px'
           }}>
-            {plotData.density_patient?.plots?.map((data, index) => (
-              <DensityPlot 
-                key={`patient-${index}-${data.group || data.patient || data.case}-${data.limits?.lower}-${data.limits?.upper}`}
-                data={data}
-                limits={data.limits || { lower: 0, upper: 1 }}
-                color={`hsl(${(index * 30) % 360}, 70%, 50%)`}
-              />
-            )) || []}
+            <h3 style={{ 
+              fontSize: '28px',
+              color: '#EEEEEE',
+              marginBottom: '15px',
+              fontWeight: '300',
+              letterSpacing: '0.5px'
+            }}>
+              Ready to Explore Your Data
+            </h3>
+            <p style={{ 
+              fontSize: '14px',
+              color: '#AAAAAA',
+              lineHeight: '1.6',
+              marginBottom: '10px'
+            }}>
+              Select your filter options from the panel on the right and click <strong>"Apply Filters"</strong> to visualize the distributions of your data.
+            </p>
+            <p style={{ 
+              fontSize: '12px',
+              color: '#777777',
+              fontStyle: 'italic',
+              marginTop: '30px'
+            }}>
+              Choose your filtering criteria to get started
+            </p>
           </div>
         </div>
+      ) : (
+        <div style={{ padding: '20px' }}>
+          <div>
+            <h3 style={{ color: '#EEEEEE' }}>Distribution by Patient</h3>
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gap: '15px'
+            }}>
+              {plotData.density_patient?.plots?.map((data, index) => (
+                <DensityPlot 
+                  key={`patient-${index}-${data.group || data.patient || data.case}-${data.limits?.lower}-${data.limits?.upper}`}
+                  data={data}
+                  limits={data.limits || { lower: 0, upper: 1 }}
+                  color={`hsl(${(index * 30) % 360}, 70%, 50%)`}
+                />
+              )) || []}
+            </div>
+          </div>
 
-        <div style={{ marginTop: '40px' }}>
-          <h3 style={{ color: '#EEEEEE' }}>Distribution by Case/Control</h3>
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-            gap: '15px'
-          }}>
-            {plotData.density_case?.plots?.map((data, index) => (
-              <DensityPlot 
-                key={`case-${index}-${data.group || data.patient || data.case}-${data.limits?.lower}-${data.limits?.upper}`}
-                data={data}
-                limits={data.limits || { lower: 0, upper: 1 }}
-                color={`hsl(${(index * 30) % 360}, 70%, 50%)`}
-              />
-            )) || []}
+          <div style={{ marginTop: '40px' }}>
+            <h3 style={{ color: '#EEEEEE' }}>Distribution by Case/Control</h3>
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gap: '15px'
+            }}>
+              {plotData.density_case?.plots?.map((data, index) => (
+                <DensityPlot 
+                  key={`case-${index}-${data.group || data.patient || data.case}-${data.limits?.lower}-${data.limits?.upper}`}
+                  data={data}
+                  limits={data.limits || { lower: 0, upper: 1 }}
+                  color={`hsl(${(index * 30) % 360}, 70%, 50%)`}
+                />
+              )) || []}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </FilterPageTemplate>
   );
 };

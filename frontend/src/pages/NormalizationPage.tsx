@@ -4,11 +4,9 @@ import NormalizationPageTemplate from "../components/NormalizationPageTemplate";
 import DensityPlot from "../components/DensityPlot";
 import ErrorMessage from "../components/ErrorMessage";
 import LoadingSpinner from "../components/LoadingSpinner";
-// import NormalizationOptions from "../components/NormalizationOptions";
 import axios from "axios";
 import API_ENDPOINTS from "../config/api";
 
-// Reuse the same interfaces from FilterPage
 interface PlotResponse {
   density_patient: {
     plots: PlotData[];
@@ -34,302 +32,431 @@ interface DensityPoint {
 
 const NormalizationPage: React.FC = () => {
   const [plotData, setPlotData] = React.useState<PlotResponse | null>(null);
-  const [loading, setLoading] = React.useState<boolean>(true);
+  const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [entries, setEntries] = React.useState<string[]>([]);
-  const [selectedReference, setSelectedReference] = React.useState<string>('iRT-Kit_WR_fusion');
-  const [normalizing, setNormalizing] = React.useState<boolean>(false);
 
+  const [entries, setEntries] = React.useState<string[]>([]);
+  const [selectedReference, setSelectedReference] =
+    React.useState<string>("iRT-Kit_WR_fusion");
+
+  const [method, setMethod] = React.useState<string>("reference");
+  const [statisticOption, setStatisticOption] = React.useState<string>("mean");
+  const [normalizing, setNormalizing] = React.useState(false);
+  const [normalizationApplied, setNormalizationApplied] = React.useState(false);
+
+  // Used prop for template
   const handleUpdate = (newData: PlotResponse) => {
     setPlotData(newData);
   };
 
+  /* ---------------------- Fetch available entries ---------------------- */
   const fetchEntries = React.useCallback(() => {
-    const dataset_id = localStorage.getItem('selectedDatasetId');
-    const token = localStorage.getItem('token');
-    
+    const dataset_id = localStorage.getItem("selectedDatasetId");
+    const token = localStorage.getItem("token");
     if (!dataset_id || !token) return;
 
-    axios.get(`${API_ENDPOINTS.NORMAL}?dataset_id=${dataset_id}&get_entries=true`, {
-      headers: {
-        Authorization: `Token ${token}`,
-      },
-    })
-      .then(response => {
-        if (response.data.entries) {
-          setEntries(response.data.entries);
-          // Set default to iRT-Kit_WR_fusion if available, otherwise first entry
-          if (response.data.entries.includes('iRT-Kit_WR_fusion')) {
-            setSelectedReference('iRT-Kit_WR_fusion');
-          } else if (response.data.entries.length > 0) {
-            setSelectedReference(response.data.entries[0]);
-          }
-        }
+    axios
+      .get(`${API_ENDPOINTS.NORMAL}?dataset_id=${dataset_id}&get_entries=true`, {
+        headers: { Authorization: `Token ${token}` },
       })
-      .catch(err => {
-        console.error('Error fetching entries:', err);
+      .then((response) => {
+        const fetchedEntries = response.data.entries || [];
+        setEntries(fetchedEntries);
+      })
+      .catch((err) => {
+        console.error("Error fetching entries:", err);
       });
   }, []);
 
+  /* --------- Enforce valid default reference once entries load --------- */
+  React.useEffect(() => {
+    if (!entries.length) return;
+
+    if (!entries.includes(selectedReference)) {
+      if (entries.includes("iRT-Kit_WR_fusion")) {
+        setSelectedReference("iRT-Kit_WR_fusion");
+      } else {
+        setSelectedReference(entries[0]);
+      }
+    }
+  }, [entries, selectedReference]);
+
+  /* ------------------- Fetch existing normalization -------------------- */
   const fetchNormalizedData = React.useCallback(() => {
-    setLoading(true);
-    const dataset_id = localStorage.getItem('selectedDatasetId');
-    const token = localStorage.getItem('token');
-    
+    const dataset_id = localStorage.getItem("selectedDatasetId");
+    const token = localStorage.getItem("token");
+
     if (!dataset_id || !token) {
-      setError('No dataset selected');
+      setError("No dataset selected");
+      setPlotData(null);
       setLoading(false);
       return;
     }
 
-    axios.get(`${API_ENDPOINTS.NORMAL}?dataset_id=${dataset_id}`, {
-      headers: {
-        Authorization: `Token ${token}`,
-      },
-    })
-      .then(response => {
-        console.log("NORMALIZATION PAGE RESPONSE:", response.data);
+    setLoading(true);
+    setError(null);
+
+    const params: any = { dataset_id, method };
+    if (method === "reference" && entries.includes(selectedReference)) {
+      params.reference = selectedReference;
+    } else if (method === "divide" || method === "subtract") {
+      params.reference = statisticOption;
+    } else if (method === "z-score") {
+      params.reference = "";
+    }
+
+    axios
+      .get(API_ENDPOINTS.NORMAL, {
+        headers: { Authorization: `Token ${token}` },
+        params,
+      })
+      .then((response) => {
         if (response.data.error) {
-          // If normalization doesn't exist yet, that's okay - user can create it
-          if (response.data.error.includes('normalization does not exist')) {
+          if (response.data.error.includes("normalization does not exist")) {
             setPlotData(null);
-            setError(null); // Clear error so user can see the selection bar
+            setError(null);
           } else {
+            setPlotData(null);
             setError(response.data.error);
           }
           setLoading(false);
           return;
         }
-        
-        // Ensure the data is in the correct format
-        const plotData = {
+
+        setPlotData({
           density_patient: {
             plots: response.data.density_patient?.plots || [],
-            limits: response.data.density_patient?.limits || { lower: 0, upper: 0 }
+            limits:
+              response.data.density_patient?.limits || { lower: 0, upper: 0 },
           },
           density_case: {
-            plots: response.data.density_case?.plots || []
-          }
-        };
-        
-        setPlotData(plotData);
+            plots: response.data.density_case?.plots || [],
+          },
+        });
+
         setError(null);
+        setNormalizationApplied(true);
         setLoading(false);
       })
-      .catch(err => {
-        console.error('Error fetching normalized data:', err);
-        // If it's a 400 error about normalization not existing, that's okay
-        if (err.response?.status === 400 && err.response?.data?.error?.includes('normalization does not exist')) {
-          setPlotData(null);
-          setError(null);
-        } else {
-          setError('Failed to load normalized data');
-        }
+      .catch(() => {
+        setPlotData(null);
+        setError("Failed to load normalized data");
         setLoading(false);
       });
-  }, []);
+  }, [method, statisticOption, selectedReference, entries]);
 
+  /* -------------------------- Normalize POST --------------------------- */
   const handleNormalize = () => {
-    if (!selectedReference) {
-      setError('Please select a reference entry');
+    const dataset_id = localStorage.getItem("selectedDatasetId");
+    const token = localStorage.getItem("token");
+
+    if (!dataset_id || !token) {
+      setError("No dataset selected");
+      setPlotData(null);
+      return;
+    }
+
+    if (method === "reference" && !entries.includes(selectedReference)) {
+      setError("Please select a valid reference protein.");
+      setPlotData(null);
       return;
     }
 
     setNormalizing(true);
-    const dataset_id = localStorage.getItem('selectedDatasetId');
-    const token = localStorage.getItem('token');
+    setError(null);
 
-    if (!dataset_id || !token) {
-      setError('No dataset selected');
-      setNormalizing(false);
-      return;
+    // Prepare reference value according to method
+    let referenceValue = "";
+    if (method === "reference") {
+      referenceValue = selectedReference;
+    } else if (method === "divide" || method === "subtract") {
+      referenceValue = statisticOption;
     }
 
-    axios.post(
-      `${API_ENDPOINTS.NORMAL}`,
-      {
-        dataset_id: dataset_id,
-        reference_entry: selectedReference,
-      },
-      {
-        headers: {
-          Authorization: `Token ${token}`,
-          'Content-Type': 'application/json',
+    axios
+      .post(
+        API_ENDPOINTS.NORMAL,
+        {
+          dataset_id,
+          method,
+          reference: referenceValue,
         },
-      }
-    )
-      .then(response => {
-        console.log("NORMALIZATION POST RESPONSE:", response.data);
+        {
+          headers: {
+            Authorization: `Token ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+      .then((response) => {
         if (response.data.error) {
+          setPlotData(null);
           setError(response.data.error);
           setNormalizing(false);
           return;
         }
-        
-        // Update plot data with new normalization
-        const plotData = {
+
+        setPlotData({
           density_patient: {
             plots: response.data.density_patient?.plots || [],
-            limits: response.data.density_patient?.limits || { lower: 0, upper: 0 }
+            limits:
+              response.data.density_patient?.limits || { lower: 0, upper: 0 },
           },
           density_case: {
-            plots: response.data.density_case?.plots || []
-          }
-        };
-        
-        setPlotData(plotData);
+            plots: response.data.density_case?.plots || [],
+          },
+        });
+
+        setError(null);
         setNormalizing(false);
+        setNormalizationApplied(true);
       })
-      .catch(err => {
-        console.error('Error normalizing data:', err);
-        setError(err.response?.data?.error || 'Failed to normalize data');
+      .catch((err) => {
+        setPlotData(null);
+        setError(err.response?.data?.error || "Failed to normalize data");
         setNormalizing(false);
       });
   };
 
   React.useEffect(() => {
     fetchEntries();
-    fetchNormalizedData();
-  }, [fetchEntries, fetchNormalizedData]);
+  }, [fetchEntries]);
 
-  if (loading && entries.length === 0) return (
-    <NormalizationPageTemplate title="Data Normalization" onFilterUpdate={handleUpdate}>
-      <LoadingSpinner 
-        message="Loading Normalization Data"
-        subMessage="Fetching available reference entries..."
-      />
-    </NormalizationPageTemplate>
-  );
+  React.useEffect(() => {
+    if (entries.length) {
+      fetchNormalizedData();
+    }
+  }, [fetchNormalizedData, entries]);
 
-  if (error && !entries.length) return (
-    <NormalizationPageTemplate title="Data Normalization" onFilterUpdate={handleUpdate}>
-      <ErrorMessage
-        message={error.includes('Failed to load') ? 
-          'No data selected. Please upload and select a dataset first.' : 
-          error}
-        type="error"
-      />
-    </NormalizationPageTemplate>
-  );
+  const canNormalize =
+    !normalizing &&
+    entries.length > 0 &&
+    (method !== "reference" || entries.includes(selectedReference));
+
+  /* ----------------------------- Render ----------------------------- */
+
+  if (loading && !entries.length) {
+    return (
+      <NormalizationPageTemplate
+        title="Data Normalization"
+        onFilterUpdate={handleUpdate}
+        initialNormalizationApplied={normalizationApplied}
+      >
+        <LoadingSpinner
+          message="Loading Normalization Data"
+          subMessage="Fetching available reference entries..."
+        />
+      </NormalizationPageTemplate>
+    );
+  }
 
   return (
     <NormalizationPageTemplate
       title="Data Normalization"
       onFilterUpdate={handleUpdate}
+      initialNormalizationApplied={normalizationApplied}
     >
-      <div style={{ padding: '20px' }}>
-        {/* Reference Selection Bar */}
-        <div style={{
-          marginBottom: '30px',
-          padding: '15px',
-          backgroundColor: '#2a2a2a',
-          borderRadius: '8px',
-          border: '1px solid #4A4A4A',
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '15px',
-            flexWrap: 'wrap',
-          }}>
-            <label htmlFor="referenceSelect" style={{ color: '#EEEEEE', fontSize: '14px' }}>
-              Normalization Reference (PG.UniProtIds):
+      <div style={{ padding: "20px" }}>
+        {/* ------------------ Selection Bar ------------------ */}
+        <div
+          style={{
+            marginBottom: "30px",
+            padding: "15px",
+            backgroundColor: "#2a2a2a",
+            borderRadius: "8px",
+            border: "1px solid #4A4A4A",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              gap: "15px",
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            {/* Method select */}
+            <label style={{ color: "#EEEEEE", fontSize: "14px" }}>
+              Normalization Method:
             </label>
             <select
-              id="referenceSelect"
-              value={selectedReference}
-              onChange={(e) => setSelectedReference(e.target.value)}
-              disabled={normalizing || entries.length === 0}
+              value={method}
+              onChange={(e) => setMethod(e.target.value)}
+              disabled={normalizing}
               style={{
-                flex: '1',
-                minWidth: '200px',
-                maxWidth: '400px',
-                padding: '8px',
-                backgroundColor: '#1e1e1e',
-                color: '#FFFFFF',
-                border: '1px solid #4A4A4A',
-                borderRadius: '4px',
-                fontSize: '14px',
-                fontFamily: 'Times New Roman, serif',
+                padding: "8px",
+                backgroundColor: "#1e1e1e",
+                color: "#fff",
+                border: "1px solid #4A4A4A",
+                borderRadius: "4px",
               }}
             >
-              {entries.map((entry) => (
-                <option key={entry} value={entry}>
-                  {entry}
-                </option>
-              ))}
+              <option value="reference">Reference</option>
+              <option value="divide">Divide</option>
+              <option value="subtract">Subtract</option>
+              <option value="z-score">Z-Score</option>
             </select>
+
+            {/* Statistic option for divide/subtract */}
+            {(method === "divide" || method === "subtract") && (
+              <>
+                <label style={{ color: "#EEEEEE", fontSize: "14px" }}>
+                  Statistic:
+                </label>
+                <select
+                  value={statisticOption}
+                  onChange={(e) => setStatisticOption(e.target.value)}
+                  disabled={normalizing}
+                  style={{
+                    padding: "8px",
+                    backgroundColor: "#1e1e1e",
+                    color: "#fff",
+                    border: "1px solid #4A4A4A",
+                    borderRadius: "4px",
+                  }}
+                >
+                  <option value="mean">Mean</option>
+                  <option value="median">Median</option>
+                  <option value="mode">Mode</option>
+                </select>
+              </>
+            )}
+
+            {/* Reference selection for reference method */}
+            {method === "reference" && (
+              <>
+                <label style={{ color: "#EEEEEE", fontSize: "14px" }}>
+                  Normalization Reference Protein:
+                </label>
+                <select
+                  value={selectedReference}
+                  onChange={(e) => setSelectedReference(e.target.value)}
+                  disabled={normalizing || entries.length === 0}
+                  style={{
+                    padding: "8px",
+                    backgroundColor: "#1e1e1e",
+                    color: "#fff",
+                    border: "1px solid #4A4A4A",
+                    borderRadius: "4px",
+                    maxWidth: "200px",
+                    minWidth: "150px",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {entries.map((entry) => (
+                    <option key={entry} value={entry}>
+                      {entry}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+
+            {/* Normalize button */}
             <button
               onClick={handleNormalize}
-              disabled={normalizing || !selectedReference || entries.length === 0}
+              disabled={!canNormalize}
               style={{
-                padding: '8px 20px',
-                backgroundColor: normalizing ? '#555' : '#4CAF50',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: normalizing ? 'not-allowed' : 'pointer',
-                fontSize: '14px',
-                fontWeight: 'bold',
-                fontFamily: 'Times New Roman, serif',
-                opacity: (normalizing || !selectedReference || entries.length === 0) ? 0.6 : 1,
+                padding: "8px 20px",
+                backgroundColor: canNormalize ? "#4CAF50" : "#555",
+                color: "#fff",
+                border: "none",
+                borderRadius: "4px",
+                cursor: canNormalize ? "pointer" : "not-allowed",
               }}
             >
-              {normalizing ? 'Normalizing...' : 'Normalize'}
+              {normalizing ? "Normalizing..." : normalizationApplied ? "Update Normalization" : "Normalize"}
             </button>
           </div>
         </div>
 
-        {error && (
-          <div style={{ marginBottom: '20px' }}>
-            <ErrorMessage message={error} type="error" />
-          </div>
-        )}
+        {/* ------------------ Error ------------------ */}
+        {error && <ErrorMessage message={error} type="error" />}
 
-        {!plotData && !error && (
-          <div style={{ marginTop: '20px', padding: '20px', textAlign: 'center' }}>
-            <p style={{ color: '#EEEEEE' }}>
-              No normalized data available. Please select a reference entry and click "Normalize" to generate normalized plots.
-            </p>
-          </div>
-        )}
-
-        {plotData && (
-          <>
-            <div>
-              <h3 style={{ color: '#EEEEEE' }}>Normalized Distribution by Patient</h3>
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-                gap: '15px'
+        {/* ------------------ No data - Show elegant message ------------------ */}
+        {!normalizationApplied && !plotData && !error && (
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            height: 'calc(100vh - 300px)',
+            padding: '20px'
+          }}>
+            <div style={{ 
+              textAlign: 'center',
+              maxWidth: '500px'
+            }}>
+              <h3 style={{ 
+                fontSize: '28px',
+                color: '#EEEEEE',
+                marginBottom: '15px',
+                fontWeight: '300',
+                letterSpacing: '0.5px'
               }}>
-                {plotData.density_patient?.plots?.map((data, index) => (
-                  <DensityPlot 
-                    key={`patient-${index}-${data.group || data.patient || data.case}-${data.limits?.lower}-${data.limits?.upper}`}
-                    data={data}
-                    limits={data.limits || { lower: 0, upper: 1 }}
-                    color={`hsl(${(index * 30) % 360}, 70%, 50%)`}
-                  />
-                )) || []}
-              </div>
+                Ready to Normalize Your Data
+              </h3>
+              <p style={{ 
+                fontSize: '14px',
+                color: '#AAAAAA',
+                lineHeight: '1.6',
+                marginBottom: '10px'
+              }}>
+                Select your normalization method and parameters from above, then click <strong>"Normalize"</strong> to apply the transformation to your data.
+              </p>
+              <p style={{ 
+                fontSize: '12px',
+                color: '#777777',
+                fontStyle: 'italic',
+                marginTop: '30px'
+              }}>
+                Choose your normalization settings to get started
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------ Plots ------------------ */}
+        {normalizationApplied && plotData && !error && (
+          <>
+            <h3 style={{ color: "#EEEEEE" }}>
+              Normalized Distribution by Patient
+            </h3>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fill, minmax(300px, 1fr))",
+                gap: "15px",
+              }}
+            >
+              {plotData.density_patient.plots.map((data, index) => (
+                <DensityPlot
+                  key={`patient-${index}`}
+                  data={data}
+                  limits={data.limits || { lower: 0, upper: 1 }}
+                />
+              ))}
             </div>
 
-            <div style={{ marginTop: '40px' }}>
-              <h3 style={{ color: '#EEEEEE' }}>Normalized Distribution by Case/Control</h3>
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-                gap: '15px'
-              }}>
-                {plotData.density_case?.plots?.map((data, index) => (
-                  <DensityPlot 
-                    key={`case-${index}-${data.group || data.patient || data.case}-${data.limits?.lower}-${data.limits?.upper}`}
-                    data={data}
-                    limits={data.limits || { lower: 0, upper: 1 }}
-                    color={`hsl(${(index * 30) % 360}, 70%, 50%)`}
-                  />
-                )) || []}
-              </div>
+            <h3 style={{ color: "#EEEEEE", marginTop: "40px" }}>
+              Normalized Distribution by Case/Control
+            </h3>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fill, minmax(300px, 1fr))",
+                gap: "15px",
+              }}
+            >
+              {plotData.density_case.plots.map((data, index) => (
+                <DensityPlot
+                  key={`case-${index}`}
+                  data={data}
+                  limits={data.limits || { lower: 0, upper: 1 }}
+                />
+              ))}
             </div>
           </>
         )}

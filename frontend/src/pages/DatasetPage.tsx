@@ -87,6 +87,41 @@ const DatasetUploadPage: React.FC = () => {
     }
   };
 
+  // Delete dataset
+  const handleDeleteDataset = async (datasetId: number, datasetName: string) => {
+    if (!window.confirm(`Are you sure you want to delete the dataset "${datasetName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${API_ENDPOINTS.DATASET}?dataset_id=${datasetId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Token ${token}`,
+        },
+      });
+
+      if (res.ok || res.status === 204) {
+        setDatasets((prev) => prev.filter((d) => d.id !== datasetId));
+        // If the deleted dataset was selected, clear the selection
+        if (selectedDatasetId === datasetId) {
+          setSelectedDatasetId(null);
+          localStorage.removeItem('selectedDatasetId');
+        }
+        alert(`Dataset "${datasetName}" deleted successfully.`);
+      } else {
+        const errorData = await res.json();
+        alert(`Failed to delete dataset: ${errorData.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Error deleting dataset:', err);
+      alert('An error occurred while deleting the dataset.');
+    }
+  };
+
   const headerStyle: React.CSSProperties = {
     color: '#E0E0E0',
     textAlign: 'left',
@@ -170,9 +205,23 @@ const DatasetUploadPage: React.FC = () => {
                     border: 'none',
                     borderRadius: '4px',
                     cursor: 'pointer',
+                    marginRight: '8px',
                   }}
                 >
                   {selectedDatasetId === dataset.id ? 'Selected' : 'Select'}
+                </button>
+                <button
+                  onClick={() => handleDeleteDataset(dataset.id, dataset.name)}
+                  style={{
+                    padding: '6px 10px',
+                    backgroundColor: '#CC6655',
+                    color: '#E0E0E0',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Delete
                 </button>
               </td>
             </tr>

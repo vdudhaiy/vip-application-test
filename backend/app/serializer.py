@@ -63,37 +63,28 @@ class FilterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = FilterData
-        fields = '__all__'
+        # Only expose the fields that users can update via API
+        fields = ['filteroption', 'applyin', 'value', 'density_patient', 'density_case']
     
+    density_patient = serializers.SerializerMethodField()
+    density_case = serializers.SerializerMethodField()
+
     def get_density_patient(self, obj):
         if obj.filter_data:
-            return density_by_patient(pd.DataFrame.from_records(obj.filter_data['data']))
-        else:
-            return None
-    
+            return density_by_patient(pd.DataFrame.from_records(obj.filter_data.get('data', [])))
+        return None
+
     def get_density_case(self, obj):
-        if obj.filter_data:
-            return density_by_case(pd.DataFrame.from_records(obj.filter_data['data']), obj.grouping['grouping'])
-        else:
-            return None
-    
+        if obj.filter_data and hasattr(obj, 'grouping') and obj.grouping:
+            return density_by_case(pd.DataFrame.from_records(obj.filter_data.get('data', [])), obj.grouping.get('grouping', []))
+        return None
+
     def update(self, instance, validated_data):
-        # Update simple fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-
-        # If there is a related NormalizedData, update it instead of creating a new one
-        try:
-            normalized = instance.normalizeddata
-            # perform updates on normalized if needed
-            normalized.save()
-        except AttributeError:
-            # No related normalizeddata exists yet; optionally create it if needed
-            pass
-
         return instance
-
+    
 class NormalSerializer(serializers.ModelSerializer):
     density_patient = serializers.SerializerMethodField()
     density_case = serializers.SerializerMethodField()

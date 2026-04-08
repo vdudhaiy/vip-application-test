@@ -83,13 +83,13 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
     const notSignificant: VolcanoPoint[] = [];
 
     data.forEach(point => {
-      // Skip invalid points or points with negLogP = 0
-      if (isNaN(point.negLogP) || isNaN(point.logFC) || point.negLogP === 0) {
+      // Skip invalid points but allow negLogP = 0
+      if (isNaN(point.negLogP) || isNaN(point.logFC)) {
         return;
       }
       
-      // Ensure negLogP is always positive
-      const safeNegLogP = Math.max(point.negLogP, 0.00001);
+      // Ensure negLogP is always non-negative
+      const safeNegLogP = Math.max(point.negLogP, 0);
       const pointWithSafeValues = {
         ...point,
         negLogP: safeNegLogP
@@ -113,6 +113,21 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
   };
 
   const { upRegulated, downRegulated, notSignificant } = categorizePoints();
+
+  useEffect(() => {
+    console.log('[volcano] data categorization:', {
+      dataLength: data.length,
+      upRegulated: upRegulated.length,
+      downRegulated: downRegulated.length,
+      notSignificant: notSignificant.length,
+      fcThreshold,
+      pThreshold,
+      sample: data.length > 0 ? {
+        first: data[0],
+        hasValidValues: !isNaN(data[0].logFC) && !isNaN(data[0].negLogP)
+      } : null
+    });
+  }, [data, upRegulated, downRegulated, notSignificant]);
 
   return (
     <div
@@ -165,6 +180,7 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
               domain={xDomain}
               stroke="#ffffff"
               tickFormatter={formatToFourDecimals}
+              label={{ value: "Log FC (Fold Change)", position: "insideBottomRight", offset: -10, fill: "#ffffff" }}
             />
             <YAxis
               dataKey="negLogP"
@@ -173,6 +189,7 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
               domain={yDomain}
               stroke="#ffffff"
               tickFormatter={formatToFourDecimals}
+              label={{ value: "-Log P-value", angle: -90, position: "insideLeft", fill: "#ffffff" }}
             />
             
             {/* Boundary lines */}
@@ -197,19 +214,28 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
             
             <Tooltip
               cursor={{ strokeDasharray: "3 3" }}
-              contentStyle={{ backgroundColor: "#333", border: "1px solid #666" }}
+              contentStyle={{ backgroundColor: "#333", border: "1px solid #666", padding: "8px" }}
               labelStyle={{ color: "#fff" }}
               itemStyle={{ color: "#fff" }}
-              formatter={(value, name) =>
-                [Number(value).toFixed(4), name === "logFC" ? "Log FC" : "-Log P"]
-              }
-              labelFormatter={(label, payload) =>
-                `Label: ${
-                  payload && payload[0] && payload[0].payload
-                    ? payload[0].payload.label
-                    : label
-                }`
-              }
+              content={({ active, payload }) => {
+                if (active && payload && payload[0]) {
+                  const data = payload[0].payload;
+                  return (
+                    <div style={{ color: "#fff" }}>
+                      <p style={{ margin: "2px 0" }}>
+                        <strong>{data.label}</strong>
+                      </p>
+                      <p style={{ margin: "2px 0" }}>
+                        Log FC (X): {Number(data.logFC).toFixed(4)}
+                      </p>
+                      <p style={{ margin: "2px 0" }}>
+                        -Log P (Y): {Number(data.negLogP).toFixed(4)}
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              }}
             />
             
             {/* Scatter plots with different colors */}
@@ -409,6 +435,7 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
                     stroke="#ffffff"
                     tickFormatter={formatToFourDecimals}
                     fontSize={14}
+                    label={{ value: "Log FC (Fold Change)", position: "insideBottomRight", offset: -10, fill: "#ffffff" }}
                   />
                   <YAxis
                     dataKey="negLogP"
@@ -418,6 +445,7 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
                     stroke="#ffffff"
                     tickFormatter={formatToFourDecimals}
                     fontSize={14}
+                    label={{ value: "-Log P-value", angle: -90, position: "insideLeft", fill: "#ffffff" }}
                   />
                   
                   {/* Boundary lines */}
@@ -442,19 +470,28 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
                   
                   <Tooltip
                     cursor={{ strokeDasharray: "3 3" }}
-                    contentStyle={{ backgroundColor: "#333", border: "1px solid #666" }}
+                    contentStyle={{ backgroundColor: "#333", border: "1px solid #666", padding: "8px" }}
                     labelStyle={{ color: "#fff" }}
                     itemStyle={{ color: "#fff" }}
-                    formatter={(value, name) =>
-                      [Number(value).toFixed(4), name === "logFC" ? "Log FC" : "-Log P"]
-                    }
-                    labelFormatter={(label, payload) =>
-                      `Label: ${
-                        payload && payload[0] && payload[0].payload
-                          ? payload[0].payload.label
-                          : label
-                      }`
-                    }
+                    content={({ active, payload }) => {
+                      if (active && payload && payload[0]) {
+                        const data = payload[0].payload;
+                        return (
+                          <div style={{ color: "#fff" }}>
+                            <p style={{ margin: "2px 0" }}>
+                              <strong>{data.label}</strong>
+                            </p>
+                            <p style={{ margin: "2px 0" }}>
+                              Log FC (X): {Number(data.logFC).toFixed(4)}
+                            </p>
+                            <p style={{ margin: "2px 0" }}>
+                              -Log P (Y): {Number(data.negLogP).toFixed(4)}
+                            </p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
                   />
                   
                   {/* Scatter plots with different colors */}

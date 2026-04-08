@@ -37,6 +37,8 @@ run:
 	@echo "Starting application (detached)..."
 	$(COMPOSE) up -d
 	@echo "Application started at http://localhost:3000"
+	@echo "Opening browser..."
+	@command -v open >/dev/null 2>&1 && open http://localhost:3000 || xdg-open http://localhost:3000 2>/dev/null || true
 
 # -----------------------------
 # 3. Logs

@@ -188,7 +188,7 @@ const DataUpload: React.FC<DataUploadProps> = ({ title, uploadEndpoint }) => {
           }}
           disabled={uploading}
         >
-          {uploading ? "Uploading..." : "Upload"}
+          {uploading ? "Uploading..." : tableData.length > 0 ? "Update" : "Upload"}
         </button>
       </div>
       <div style={{ marginTop: '10px', color: '#999', fontSize: '12px',  textAlign: 'left'}}>

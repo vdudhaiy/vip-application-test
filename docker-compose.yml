@@ -3,8 +3,13 @@ services:
     build: ./backend
     container_name: django_backend
     env_file: .env
+    environment:
+      - DEBUG=True
     ports:
-      - "8080:8000"
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - backend_static:/app/static
     depends_on:
       - db
 
@@ -12,7 +17,10 @@ services:
     build: ./frontend
     container_name: react_frontend
     ports:
-      - "3000:80"
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
       - backend
 
@@ -27,3 +35,4 @@ services:
 
 volumes:
   postgres_data:
+  backend_static:

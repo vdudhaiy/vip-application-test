@@ -12,8 +12,8 @@ const TransformationPageTemplate: React.FC<TransformationPageTemplateProps> = ({
   children
 }) => {
   return (
-    <div id="transformation-page-template" style={{ display: "flex", height: "100vh", backgroundColor: "#1e1e1e" }}>
-      <div style={{ textAlign: "center", flex: 1, padding: "20px", backgroundColor: "#1e1e1e", color:"white" }}> 
+    <div id="transformation-page-template" style={{ display: "flex", height: "100vh", backgroundColor: "#1e1e1e", overflow: "hidden" }}>
+      <div style={{ textAlign: "center", flex: 1, padding: "20px", backgroundColor: "#1e1e1e", color:"white", overflow: "auto", overflowX: "hidden" }}> 
         <h2>{title}</h2>
         {children}
       </div>

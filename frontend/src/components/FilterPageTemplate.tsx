@@ -7,20 +7,35 @@ interface FilterPageTemplateProps {
   filters: React.ReactNode;
   children?: ReactNode;
   onFilterUpdate?: (data: PlotResponse) => void;
+  onFiltersApplied?: (applied: boolean) => void;
+  initialFiltersApplied?: boolean;
 }
 
 const FilterPageTemplate: React.FC<FilterPageTemplateProps> = ({
   title,
   filters,
   children,
-  onFilterUpdate
+  onFilterUpdate,
+  onFiltersApplied,
+  initialFiltersApplied = false
 }) => {
   const [filterState, setFilterState] = useState<FilterState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasFiltersApplied, setHasFiltersApplied] = useState(initialFiltersApplied);
 
   const handleApplyFilters = async () => {
     console.log("Frontend: Starting filter application...");
     if (!filterState) return;
+
+    // Validate that value is set
+    const value = filterState.filterType === 'percentage'
+      ? filterState.percentageValue
+      : filterState.numberValue;
+
+    if (value === "" || value === null || value === undefined) {
+      alert("Please enter a valid filter value");
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -28,12 +43,10 @@ const FilterPageTemplate: React.FC<FilterPageTemplateProps> = ({
       const params = {
           filteroption: filterState.filterType,
           applyin: filterState.subOption,
-          value: filterState.filterType === 'percentage'
-            ? filterState.percentageValue
-            : filterState.numberValue
+          value: value
       };
 
-      console.log("Frontend: Making API request...");
+      console.log("Frontend: Filter params:", params);
       const token = localStorage.getItem('token')
       const dataset_id = localStorage.getItem('selectedDatasetId')
       const response = await fetch(`${API_ENDPOINTS.FILTER}?dataset_id=${dataset_id}`, {
@@ -45,7 +58,9 @@ const FilterPageTemplate: React.FC<FilterPageTemplateProps> = ({
         body: JSON.stringify(params)
       });
       if (!response.ok) {
-        throw new Error('Failed to apply filters');
+        const errorData = await response.json();
+        console.error('Frontend: Backend error response:', errorData);
+        throw new Error(`Failed to apply filters: ${JSON.stringify(errorData)}`);
       }
 
       const data = await response.json();
@@ -67,9 +82,16 @@ const FilterPageTemplate: React.FC<FilterPageTemplateProps> = ({
           console.log("Frontend: Updating filter state...");
           onFilterUpdate(filteredData);
         }
+
+        // Mark filters as applied successfully
+        setHasFiltersApplied(true);
+        if (onFiltersApplied) {
+          onFiltersApplied(true);
+        }
       }
     } catch (error) {
       console.error('Frontend: Error applying filters:', error);
+      alert(`Error applying filters: ${error}`);
     } finally {
       console.log("Frontend: Filter process completed");
       setIsLoading(false);
@@ -126,7 +148,7 @@ const FilterPageTemplate: React.FC<FilterPageTemplateProps> = ({
           onClick={handleApplyFilters}
           disabled={isLoading}
         >
-          {isLoading ? "Applying..." : "Apply Filters"}
+          {isLoading ? "Applying..." : hasFiltersApplied ? "Update Filters" : "Apply Filters"}
         </button>
       </div>
     </div>

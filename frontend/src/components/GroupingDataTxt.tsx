@@ -12,6 +12,7 @@ const GroupingDataTxt: React.FC<GroupingDataTxtProps> = ({
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<string | null>(null);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -42,6 +43,10 @@ const GroupingDataTxt: React.FC<GroupingDataTxtProps> = ({
           ? "File uploaded successfully."
           : "Error uploading file."
       );
+
+      if (response.status === 200) {
+        setUploadedFile(selectedFile.name);
+      }
     } catch (error) {
       console.error("Upload error:", error);
       alert("Failed to upload file.");
@@ -79,7 +84,7 @@ const GroupingDataTxt: React.FC<GroupingDataTxtProps> = ({
           }}
           disabled={uploading}
         >
-          {uploading ? "Uploading..." : "Upload"}
+          {uploading ? "Uploading..." : uploadedFile ? "Update" : "Upload"}
         </button>
       </div>
 

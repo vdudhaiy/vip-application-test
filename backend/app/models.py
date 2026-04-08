@@ -5,10 +5,16 @@ from django.core.exceptions import ValidationError
 from django.conf import settings
 from django.contrib.auth.models import User
 
-# Custom
-from .utils.preprocessing import *
-from .utils.histogram_processing import *
-from .utils.validation import *
+# Custom - Preprocessing functions
+from .utils.preprocessing import (
+    find_last_leading_text_column,
+    filter_nones,
+    normalize_data,
+    transformation,
+    impute_missing,
+)
+from .utils.histogram_processing import density_by_patient, density_by_case
+from .utils.validation import validate_rawdata_file_extension, validate_group_file_extension
 
 # General
 import os
@@ -23,6 +29,14 @@ class OverwriteStorage(FileSystemStorage):
     def get_available_name(self, name, max_length=None):
         self.delete(name)  # Delete old file if it exists
         return name
+
+def sanitize_dataframe_for_json(df):
+    """
+    Convert DataFrame to records, replacing NaN with None for JSON serialization.
+    """
+    df = df.copy()
+    df = df.replace({np.nan: None})
+    return df.to_dict(orient="records")
 
 class RawDataUpload(models.Model):
     spec_data_file = models.FileField(upload_to="rawdata/", storage=OverwriteStorage(), validators=[validate_rawdata_file_extension, ])
@@ -48,8 +62,8 @@ class RawDataUpload(models.Model):
                 # Ensure we're reading from the beginning
                 self.spec_data_file.seek(0)
                 df = pd.read_csv(self.spec_data_file)
-                # Find last non-numeric column index (assumed to be ID column)
-                last_text_col_idx = find_last_text_column(df)
+                # Find last leading non-numeric column index (assumed to be ID column)
+                last_text_col_idx = find_last_leading_text_column(df)
                 # Remove remaining non-numeric columns if any (except the last_text_col_idx)
                 non_numeric_cols = [col for col in df.columns if not np.issubdtype(df[col].dtype, np.number) and df.columns.get_loc(col) != last_text_col_idx]
                 df = df.drop(columns=non_numeric_cols)
@@ -125,7 +139,7 @@ class FilterData(models.Model):
     
     def save(self, *args, **kwargs):
         if self.raw_file and self.group_file:
-            if self.filteroption and self.applyin and self.value:
+            if self.filteroption is not None and self.applyin and self.value is not None:
                 self.filtered_data()
         super().save(*args, **kwargs)
     
@@ -140,7 +154,7 @@ class FilterData(models.Model):
             val=self.value
         )
         
-        self.filter_data = {"data":filtered_df.to_dict(orient="records")}
+        self.filter_data = {"data": sanitize_dataframe_for_json(filtered_df)}
         self.num_entries = len(filtered_df)
 
 
@@ -153,10 +167,23 @@ class NormalizedData(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)  # Set only on creation
     updated_at = models.DateTimeField(auto_now=True)  # Updates on each save
 
-    def normalize(self, reference_entry='iRT-Kit_WR_fusion'):
+    def normalize(self, reference=None, method='reference'):
+        """
+        Normalize filtered data using the selected method/reference.
+
+        Parameters:
+        reference: depends on method (e.g., reference protein name, mean/median/mode keyword).
+        method: one of 'reference', 'divide', 'subtract', or 'z-score'.
+        """
         self.grouping = self.filter_model.grouping
-        update_normal = normalize_data(self.filter_model.filter_data['data'], reference_entry=reference_entry)
-        self.normalize_data = {"data":update_normal.to_dict(orient="records")}
+
+        update_normal = normalize_data(
+            self.filter_model.filter_data['data'],
+            reference=reference,
+            method=method,
+        )
+
+        self.normalize_data = {"data": sanitize_dataframe_for_json(update_normal)}
         self.num_entries = self.filter_model.num_entries
         self.save(update_fields=['normalize_data', 'grouping', 'num_entries', 'updated_at'])
         
@@ -172,7 +199,8 @@ class TransformedData(models.Model):
 
     def transform(self):
         self.grouping = self.normal.grouping
-        self.transform_data = {"data":transformation(self.normal.normalize_data['data']).to_dict(orient="records")}
+        transform_df = transformation(self.normal.normalize_data['data'])
+        self.transform_data = {"data": sanitize_dataframe_for_json(transform_df)}
         self.num_entries = self.normal.num_entries
         self.save(update_fields=['transform_data', 'grouping', 'num_entries', 'updated_at'])
 
@@ -187,7 +215,8 @@ class ImputeData(models.Model):
 
     def impute(self):
         self.grouping = self.trans.grouping
-        self.impute_data = {"data":impute_missing(self.trans.transform_data["data"]).to_dict(orient="records")}
+        impute_df = impute_missing(self.trans.transform_data["data"])
+        self.impute_data = {"data": sanitize_dataframe_for_json(impute_df)}
         self.num_entries = self.trans.num_entries
         self.save(update_fields=['impute_data', 'grouping', 'num_entries', 'updated_at'])
 

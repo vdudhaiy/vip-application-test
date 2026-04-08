@@ -31,6 +31,7 @@ function Show-Help {
     Write-Host "  reset-db       : Stop containers + remove DB volumes"
     Write-Host "  exec-backend   : Enter backend container shell"
     Write-Host "  nuke           : Stop + remove containers, images, volumes (DANGEROUS)"
+    Write-Host "  rebuild         : Rebuild and restart containers (equivalent to 'build' + 'stop' + 'run') for development purposes (does NOT remove volumes, so DB data is preserved)"
 }
 
 switch ($cmd.ToLower()) {
@@ -44,6 +45,8 @@ switch ($cmd.ToLower()) {
         Write-Host "Starting application (detached)..."
         & $DOCKER $COMPOSE up -d
         Write-Host "Application started at http://localhost:3000"
+        Write-Host "Opening browser..."
+        Start-Process "http://localhost:3000"
     }
 
     "logs" {
@@ -98,6 +101,16 @@ switch ($cmd.ToLower()) {
         } else {
             Write-Host "No image-affecting changes detected. Rebuild not required."
         }
+    }
+
+    "rebuild" {
+        Write-Host "Rebuilding and restarting containers..."
+        & $DOCKER $COMPOSE build
+        & $DOCKER $COMPOSE down
+        & $DOCKER $COMPOSE up -d
+        Write-Host "Application started at http://localhost:3000"
+        Write-Host "Opening browser..."
+        Start-Process "http://localhost:3000"
     }
 
     "status" { & $DOCKER $COMPOSE ps }

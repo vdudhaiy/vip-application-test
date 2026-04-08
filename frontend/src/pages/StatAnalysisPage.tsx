@@ -68,11 +68,17 @@ const StatAnalysisPage: React.FC = () => {
         const volcanoData: VolcanoPoint[] = json.volcano.volcano_data.map(
           (item: any, index: number) => ({
             id: index + 1,
-            logFC: item.log2fd,
-            negLogP: item["-log10(q_value)"],
+            logFC: item.log2FC,
+            negLogP: item.neg_log10_p_value,
             label: item.Protein,
           })
         );
+
+        console.log('[analysis] volcano data sample:', {
+          totalPoints: volcanoData.length,
+          firstPoint: volcanoData[0],
+          hasValidData: volcanoData.some(p => !isNaN(p.negLogP) && !isNaN(p.logFC))
+        });
 
         const heatmapData: HeatMapRow[] = json.heatmap.matrix.map(
           (row: number[], rowIndex: number) => {

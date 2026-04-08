@@ -6,7 +6,8 @@ while ! nc -z $POSTGRES_HOST 5432; do
 done
 echo "Postgres started"
 
-python manage.py migrate
-python manage.py collectstatic --noinput
+python manage.py migrate --noinput
 
-gunicorn backend.wsgi:application --bind 0.0.0.0:8000
+# Run Django development server with auto-reload enabled
+# PYTHONUNBUFFERED ensures output is printed immediately
+exec python manage.py runserver 0.0.0.0:8000

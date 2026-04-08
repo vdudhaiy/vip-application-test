@@ -20,7 +20,15 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 
 from .serializer import *
-from .utils.analysis import *
+from .utils.analysis import (
+    final_data_analysis,
+    select_top_proteins,
+    prepare_volcano,
+    prepare_heatmap,
+    prepare_pairwise_volcanos,
+)
+from .utils.histogram_processing import density_by_patient, density_by_case
+from .models import Dataset, RawDataUpload, GroupDataUpload, FilterData, NormalizedData, TransformedData, ImputeData
 
 # Logger
 import logging
@@ -29,14 +37,14 @@ logger = logging.getLogger(__name__)
 # Basic root view
 @api_view(['GET'])
 @permission_classes([AllowAny])
-def root():
+def root(request):
     return Response({"message": "Welcome to the VIP API"}, status=status.HTTP_200_OK)
 
 
 # Health Check View
 @api_view(['GET'])
 @permission_classes([AllowAny])
-def health_check():
+def health_check(request):
     return Response({"status": "ok"}, status=status.HTTP_200_OK)
 
 # User Management
@@ -134,6 +142,22 @@ class DatasetView(APIView):
             datasets = Dataset.objects.filter(user=user).order_by('-created_at')
             serializer = DatasetSerializer(datasets, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def delete(self, request):
+        user = request.user
+        dataset_id = request.query_params.get('dataset_id')
+
+        if not dataset_id:
+            return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            dataset = Dataset.objects.get(id=dataset_id, user=user)
+            dataset.delete()
+            return Response({"message": "Dataset deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+        except Dataset.DoesNotExist:
+            return Response({"error": "Dataset not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class RawDataUploadView(APIView):
@@ -322,14 +346,19 @@ class FilterView(APIView):
                         
             serializer = FilterSerializer(filter_data, data=request.data, partial=True)
 
+            # Save will re-run filtering with new parameters
+            logger.info("Updating FilterData with data: %s", request.data)
             if serializer.is_valid():
-                # Save will re-run filtering with new parameters
                 serializer.save()
                 # dataset.refresh_from_db()
                 dataset.save()
                 return Response({"message": "Filter options updated successfully", "data": serializer.data}
                                 , status=status.HTTP_200_OK)
             
+            # Log serializer errors to help debugging why the request is a Bad Request
+            logger.error("Filter serializer validation failed: %s", serializer.errors)
+            # Also include the raw incoming data for additional context
+            logger.error("Filter request raw data: %s", request.data)
             return Response(serializer.errors, status=400)
             
         except Exception as e:
@@ -344,7 +373,7 @@ class NormalView(APIView):
             dataset_id = request.query_params.get('dataset_id')
             get_entries = request.query_params.get('get_entries', 'false').lower() == 'true'
 
-            # logger.debug(f"NormalView GET called with dataset_id: {dataset_id}, get_entries: {get_entries}")
+            logger.debug(f"NormalView GET called with dataset_id: {dataset_id}, get_entries: {get_entries}")
 
             if not dataset_id:
                 return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -383,13 +412,17 @@ class NormalView(APIView):
         try:
             user = request.user
             dataset_id = request.data.get('dataset_id')
-            reference_entry = request.data.get('reference_entry')
+            method = request.data.get('method', "reference")
+            reference = request.data.get('reference', {})
 
             if not dataset_id:
                 return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
             
-            if not reference_entry:
-                return Response({"error": "reference_entry is required"}, status=status.HTTP_400_BAD_REQUEST)
+            if not method:
+                return Response({"error": "method is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if  method != "z-score" and not reference:
+                return Response({"error": "reference is required, please make appropriate selections."}, status=status.HTTP_400_BAD_REQUEST)
             
             dataset = get_object_or_404(Dataset, id=dataset_id, user=user)
 
@@ -398,10 +431,10 @@ class NormalView(APIView):
             
             # Get or create normalized data
             if not dataset.normal_data:
-                dataset.normal_data = NormalizedData.objects.create(filter_model=dataset.filtered_data)
+                dataset.normal_data = NormalizedData.objects.get_or_create(filter_model=dataset.filtered_data)[0]
             
-            # Normalize with the selected reference
-            dataset.normal_data.normalize(reference_entry=reference_entry)
+            # Normalize with the selected reference and method
+            dataset.normal_data.normalize(reference=reference, method=method)
             
             # Trigger pipeline to update downstream steps
             dataset.save()
@@ -500,17 +533,48 @@ def get_analysis_data(request):
         numeric_df.insert(0, 'Protein', protein_gene_col)
         df = numeric_df
 
-        result_df = final_data_r1(df, case_control, protein_gene_df)
+        result_df = final_data_analysis(df, case_control, protein_gene_df)
         volcano = prepare_volcano(result_df)
-        top_proteins = result_df.sort_values('q_value').head(20)['Protein'].tolist()
+        top_proteins = select_top_proteins(result_df, n=20, by='p_value')
         heatmap = prepare_heatmap(df, top_proteins, case_control)
 
         # Convert DataFrame safely
         result_json = json.loads(result_df.to_json(orient='records'))
 
-        # Sanitize everything else recursively
-        volcano_json = sanitize_for_json(volcano)
-        heatmap_json = sanitize_for_json(heatmap)
+        # Sanitize volcano data: convert DataFrame to JSON records
+        try:
+            volcano_data_df = volcano.get("volcano_data")
+            if volcano_data_df is None:
+                raise ValueError("volcano_data is None")
+            volcano_data_records = json.loads(volcano_data_df.to_json(orient='records'))
+        except Exception as e:
+            logger.error(f"Error serializing volcano data: {str(e)}", exc_info=True)
+            volcano_data_records = []
+        
+        volcano_json = {
+            "volcano_data": volcano_data_records,
+            "thresholds": sanitize_for_json(volcano.get("thresholds", {}))
+        }
+        
+        # Sanitize heatmap data: convert DataFrame matrix to JSON records
+        try:
+            heatmap_matrix = heatmap.get("matrix")
+            if heatmap_matrix is not None:
+                # Convert matrix (DataFrame) to list of lists (rows)
+                matrix_data = [[sanitize_for_json(v) for v in row] for row in heatmap_matrix.values]
+                heatmap_json = {
+                    "matrix": matrix_data,
+                    "row_labels": heatmap_matrix.index.tolist(),
+                    "column_labels": heatmap_matrix.columns.tolist(),
+                    "row_order": heatmap.get("row_order", []),
+                    "col_order": heatmap.get("col_order", []),
+                    "col_group_labels": heatmap.get("col_group_labels", [])
+                }
+            else:
+                heatmap_json = {}
+        except Exception as e:
+            logger.error(f"Error serializing heatmap data: {str(e)}", exc_info=True)
+            heatmap_json = {}
 
         return Response({
             "results": result_json,
@@ -519,4 +583,5 @@ def get_analysis_data(request):
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        return Response({"error": str(e)}, status=400)
+        logger.error(f"Error in get_analysis_data: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
