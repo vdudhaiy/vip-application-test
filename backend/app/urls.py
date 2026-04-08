@@ -22,7 +22,10 @@ urlpatterns = [
     path('api/normal', NormalView.as_view(), name='normal'),
     path('api/transform', TransformView.as_view(), name='transform'),
     path('api/impute', ImputationView.as_view(), name='impute'),
-    path('api/analysis', get_analysis_data, name='analysis'),
+    path('api/volcano-plot-data', get_volcano_plot_data, name='volcano-plot-data'),
+    path('api/heatmap-data', get_heatmap_data, name='heatmap-data'),
+    path('api/run-ttest', run_ttest_analysis, name='run-ttest'),
+    path('api/ttest-results', TtestResultsView.as_view(), name='ttest-results'),
 ]
 
 if settings.DEBUG:

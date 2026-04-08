@@ -22,7 +22,10 @@ import csv
 import pandas as pd
 import numpy as np
 import json
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 class OverwriteStorage(FileSystemStorage):
@@ -61,7 +64,14 @@ class RawDataUpload(models.Model):
             try:
                 # Ensure we're reading from the beginning
                 self.spec_data_file.seek(0)
-                df = pd.read_csv(self.spec_data_file)
+                
+                # Detect file format and load accordingly
+                file_ext = os.path.splitext(self.spec_data_file.name)[1].lower()
+                if file_ext == '.xlsx':
+                    df = pd.read_excel(self.spec_data_file)
+                else:  # Default to CSV
+                    df = pd.read_csv(self.spec_data_file)
+                
                 # Find last leading non-numeric column index (assumed to be ID column)
                 last_text_col_idx = find_last_leading_text_column(df)
                 # Remove remaining non-numeric columns if any (except the last_text_col_idx)
@@ -163,6 +173,21 @@ class NormalizedData(models.Model):
     normalize_data = models.JSONField(null=True)
     grouping = models.JSONField(null=True)
     num_entries = models.PositiveIntegerField(default=0)
+    
+    # Store normalization parameters for restoration
+    method = models.CharField(
+        max_length=20,
+        choices=[("reference", "Reference"), ("divide", "Divide"), ("subtract", "Subtract"), ("z-score", "Z-Score")],
+        null=True,
+        blank=True
+    )
+    reference = models.CharField(max_length=255, null=True, blank=True)  # Reference protein or statistic (mean/median/mode)
+    statistic = models.CharField(
+        max_length=10,
+        choices=[("mean", "Mean"), ("median", "Median"), ("mode", "Mode")],
+        null=True,
+        blank=True
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)  # Set only on creation
     updated_at = models.DateTimeField(auto_now=True)  # Updates on each save
@@ -183,6 +208,12 @@ class NormalizedData(models.Model):
             method=method,
         )
 
+        # DEBUG: Log the value ranges
+        numeric_cols = update_normal.select_dtypes(include=[np.number]).columns
+        if len(numeric_cols) > 0:
+            numeric_df = update_normal[numeric_cols]
+            logger.info(f"[DEBUG] After {method} normalization - Min: {numeric_df.min().min()}, Max: {numeric_df.max().max()}, Shape: {numeric_df.shape}")
+        
         self.normalize_data = {"data": sanitize_dataframe_for_json(update_normal)}
         self.num_entries = self.filter_model.num_entries
         self.save(update_fields=['normalize_data', 'grouping', 'num_entries', 'updated_at'])
@@ -193,16 +224,28 @@ class TransformedData(models.Model):
     transform_data = models.JSONField(null=True)
     grouping = models.JSONField(null=True)
     num_entries = models.PositiveIntegerField(default=0)
+    epsilon = models.FloatField(null=True, blank=True, help_text="Epsilon value for log2 transformation. Must be set before transformation.")
 
     created_at = models.DateTimeField(auto_now_add=True)  # Set only on creation
     updated_at = models.DateTimeField(auto_now=True)  # Updates on each save
 
-    def transform(self):
+    def transform(self, epsilon=None):
+        if epsilon is None:
+            epsilon = self.epsilon
+        
         self.grouping = self.normal.grouping
-        transform_df = transformation(self.normal.normalize_data['data'])
+        transform_df = transformation(self.normal.normalize_data['data'], epsilon=epsilon)
+        
+        # DEBUG: Log the value ranges
+        numeric_cols = transform_df.select_dtypes(include=[np.number]).columns
+        if len(numeric_cols) > 0:
+            numeric_df = transform_df[numeric_cols]
+            logger.info(f"[DEBUG] After log2 transformation (epsilon={epsilon}) - Min: {numeric_df.min().min()}, Max: {numeric_df.max().max()}, Shape: {numeric_df.shape}")
+        
+        self.epsilon = epsilon
         self.transform_data = {"data": sanitize_dataframe_for_json(transform_df)}
         self.num_entries = self.normal.num_entries
-        self.save(update_fields=['transform_data', 'grouping', 'num_entries', 'updated_at'])
+        self.save(update_fields=['transform_data', 'grouping', 'num_entries', 'epsilon', 'updated_at'])
 
 class ImputeData(models.Model):
     trans = models.OneToOneField(TransformedData, on_delete=models.CASCADE)
@@ -216,9 +259,56 @@ class ImputeData(models.Model):
     def impute(self):
         self.grouping = self.trans.grouping
         impute_df = impute_missing(self.trans.transform_data["data"])
+        
+        # DEBUG: Log the imputation step
+        numeric_cols = impute_df.select_dtypes(include=[np.number]).columns
+        if len(numeric_cols) > 0:
+            numeric_df = impute_df[numeric_cols]
+            num_imputed = impute_df.isna().sum().sum()
+            logger.info(f"[DEBUG] After imputation - Min: {numeric_df.min().min()}, Max: {numeric_df.max().max()}, Imputed cells: {num_imputed}, Shape: {numeric_df.shape}")
+        
         self.impute_data = {"data": sanitize_dataframe_for_json(impute_df)}
         self.num_entries = self.trans.num_entries
         self.save(update_fields=['impute_data', 'grouping', 'num_entries', 'updated_at'])
+
+class TtestResults(models.Model):
+    impute_model = models.OneToOneField(ImputeData, on_delete=models.CASCADE)
+    results_data = models.JSONField(null=True)
+    reference_group = models.CharField(max_length=100, null=True, blank=True)
+    num_proteins = models.PositiveIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)  # Set only on creation
+    updated_at = models.DateTimeField(auto_now=True)  # Updates on each save
+
+    def run_analysis(self, reference_group=None):
+        """
+        Run final_data_analysis and store the results.
+        
+        Parameters:
+        reference_group: optional reference group label for multi-group comparisons
+        """
+        from .utils.analysis import final_data_analysis
+        
+        self.reference_group = reference_group
+        
+        imputed_data = self.impute_model.impute_data['data']
+        case_control = self.impute_model.grouping['grouping']
+        
+        df = pd.DataFrame(imputed_data)
+        protein_gene_col = df.iloc[:, 0]
+        protein_gene_df = pd.DataFrame({'Protein': protein_gene_col})
+        
+        # Keep only numeric columns for analysis
+        numeric_df = df.select_dtypes(include=[np.number])
+        numeric_df.insert(0, 'Protein', protein_gene_col)
+        df = numeric_df
+        
+        result_df = final_data_analysis(df, case_control, protein_gene_df, reference_group=reference_group)
+        
+        # Convert DataFrame to JSON-safe records
+        self.results_data = {'data': sanitize_dataframe_for_json(result_df)}
+        self.num_proteins = len(result_df)
+        self.save(update_fields=['results_data', 'reference_group', 'num_proteins', 'updated_at'])
 
 class Dataset(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='datasets')
@@ -231,6 +321,7 @@ class Dataset(models.Model):
     normal_data = models.OneToOneField(NormalizedData, on_delete=models.CASCADE, null=True)
     transformed_data = models.OneToOneField(TransformedData, on_delete=models.CASCADE, null=True)
     impute_data = models.OneToOneField(ImputeData, on_delete=models.CASCADE, null=True)
+    ttest_results = models.OneToOneField(TtestResults, on_delete=models.CASCADE, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)  # Set only on creation
     updated_at = models.DateTimeField(auto_now=True)  # Updates on each save
@@ -273,21 +364,24 @@ class Dataset(models.Model):
         # Step 3: Transform
         # ---------------------------
         if self.normal_data and self.normal_data.normalize_data:
-            # Only transform if normal_data is newer than transformed_data
+            # Only transform if normal_data is newer than transformed_data AND epsilon is set
             needs_transform = (
-                not self.transformed_data or
+                self.transformed_data and
+                self.transformed_data.epsilon is not None and
                 (self.transformed_data.updated_at < self.normal_data.updated_at)
             )
             if needs_transform:
-                transformed_data, _ = TransformedData.objects.get_or_create(
+                self.transformed_data.transform(epsilon=self.transformed_data.epsilon)
+            elif not self.transformed_data:
+                # Create transformed_data object but don't transform until epsilon is selected
+                self.transformed_data, _ = TransformedData.objects.get_or_create(
                     normal=self.normal_data
                 )
-                self.transformed_data = transformed_data
-                self.transformed_data.transform()
 
         # ---------------------------
         # Step 4: Impute
         # ---------------------------
+        # Only impute if transformation has been completed (transform_data exists)
         if self.transformed_data and self.transformed_data.transform_data:
             # Only impute if transformed_data is newer than impute_data
             needs_impute = (
@@ -300,6 +394,17 @@ class Dataset(models.Model):
                 )
                 self.impute_data = impute_data
                 self.impute_data.impute()
+
+        # ---------------------------
+        # Step 5: Ttest Results (created but not auto-run)
+        # ---------------------------
+        # Create TtestResults object if impute_data exists, but don't auto-run analysis
+        # The user will explicitly run this via API endpoint
+        if self.impute_data and not self.ttest_results:
+            ttest_results, _ = TtestResults.objects.get_or_create(
+                impute_model=self.impute_data
+            )
+            self.ttest_results = ttest_results
         
     def save(self, *args, **kwargs):
         self.pipeline()

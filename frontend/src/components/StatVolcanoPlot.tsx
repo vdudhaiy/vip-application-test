@@ -9,6 +9,7 @@ import {
   Scatter,
   ReferenceLine,
 } from "recharts";
+import API_ENDPOINTS from "../config/api";
 
 // Define the shape of a volcano plot data point
 export interface VolcanoPoint {
@@ -20,26 +21,37 @@ export interface VolcanoPoint {
 
 interface StatVolcanoPlotProps {
   data: VolcanoPoint[];
+  groups?: string[];
+  datasetId?: string;
+  referenceGroup?: string | null;
+}
+
+interface PairwiseVolcanoData {
+  [contrast: string]: {
+    volcano_data: VolcanoPoint[];
+    thresholds: { log2fc: number; qval: number; pval: number };
+  };
 }
 
 /**
  * StatVolcanoPlot component
  * Uses Recharts to render an interactive volcano plot in dark mode.
+ * Handles both single and pairwise volcano plots based on number of groups.
  */
-const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
+const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data, groups = [], datasetId = "", referenceGroup = null }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [currentData, setCurrentData] = useState<VolcanoPoint[]>(data);
+  
+  // Reference group selection and pairwise volcanos
+  const [selectedReferenceGroup, setSelectedReferenceGroup] = useState<string | null>(null);
+  const [appliedReferenceGroup, setAppliedReferenceGroup] = useState<string | null>(null);
+  const [pairwiseVolcanos, setPairwiseVolcanos] = useState<PairwiseVolcanoData>({});
+  const [currentContrast, setCurrentContrast] = useState<string>("");
+  const [isLoadingPairwise, setIsLoadingPairwise] = useState<boolean>(false);
   
   // Default thresholds
   const [fcThreshold, setFcThreshold] = useState<number>(0);
   const [pThreshold, setPThreshold] = useState<number>(0);
-
-  const handleExpand = () => {
-    setIsModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-  };
 
   // Axis domains with padding
   const [xDomain, setXDomain] = useState<[number, number]>([-1, 1]);
@@ -50,12 +62,108 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
     return value.toFixed(4);
   };
 
+  const handleExpand = () => {
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+  };
+
+  // Initialize reference group selector when groups change
+  useEffect(() => {
+    if (groups.length > 0 && !selectedReferenceGroup) {
+      setSelectedReferenceGroup(groups[0]);
+    }
+  }, [groups, selectedReferenceGroup]);
+
+  // Update current data when incoming data changes
+  useEffect(() => {
+    console.log('[volcano] Incoming data prop changed:', data.length, 'points');
+    setCurrentData(data);
+  }, [data]);
+
+  // Fetch pairwise volcanos when reference group is applied
+  useEffect(() => {
+    if (appliedReferenceGroup && groups.length > 2 && datasetId) {
+      fetchPairwiseVolcanos();
+    }
+  }, [appliedReferenceGroup]);
+
+  // Fetch pairwise volcano plots for multi-group comparisons
+  const fetchPairwiseVolcanos = async () => {
+    setIsLoadingPairwise(true);
+    try {
+      const token = localStorage.getItem("token");
+      const url = `${API_ENDPOINTS.VOLCANO_PLOT_DATA}?dataset_id=${datasetId}&reference_group=${appliedReferenceGroup}`;
+      console.log('[volcano] Fetching pairwise volcanos from:', url);
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Token ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch pairwise volcanos: ${response.statusText}`);
+      }
+
+      const responseData = await response.json();
+      console.log('[volcano] Pairwise volcanos response:', responseData);
+      
+      if (responseData.pairwise_volcanos) {
+        const pairwiseData: PairwiseVolcanoData = {};
+        
+        // Transform pairwise volcano data to match VolcanoPoint format
+        for (const [contrastLabel, contrastData] of Object.entries(responseData.pairwise_volcanos)) {
+          const volcanoDataRaw = (contrastData as any).volcano_data || [];
+          const transformedVolcanoData: VolcanoPoint[] = volcanoDataRaw.map((item: any, index: number) => ({
+            id: index + 1,
+            logFC: parseFloat(item.log2FC) || 0,
+            negLogP: parseFloat(item.neg_log10_p_value) || 0,
+            label: item.Protein || `Protein_${index}`,
+          }));
+          
+          pairwiseData[contrastLabel] = {
+            volcano_data: transformedVolcanoData,
+            thresholds: (contrastData as any).thresholds || { log2fc: 0.58, qval: 0.05, pval: 0.05 }
+          };
+        }
+        
+        console.log('[volcano] Transformed pairwise data keys:', Object.keys(pairwiseData));
+        setPairwiseVolcanos(pairwiseData);
+        
+        const firstContrast = Object.keys(pairwiseData)[0];
+        if (firstContrast) {
+          console.log('[volcano] First contrast:', firstContrast);
+          const volcanoDataPoints = pairwiseData[firstContrast].volcano_data;
+          console.log('[volcano] Volcano data points for first contrast:', volcanoDataPoints);
+          setCurrentContrast(firstContrast);
+          setCurrentData(volcanoDataPoints || []);
+        }
+      } else {
+        console.warn('[volcano] No pairwise_volcanos in response');
+      }
+    } catch (error) {
+      console.error('[volcano] Error fetching pairwise volcanos:', error);
+    } finally {
+      setIsLoadingPairwise(false);
+    }
+  };
+
+  // Handle applying a reference group
+  const handleApplyReferenceGroup = () => {
+    if (selectedReferenceGroup) {
+      setAppliedReferenceGroup(selectedReferenceGroup);
+    }
+  };
+
   // Calculate axis domains with 10% padding
   useEffect(() => {
-    if (data.length > 0) {
+    if (currentData.length > 0) {
       // Find max absolute x value
       let maxAbsX = 0;
-      data.forEach(point => {
+      currentData.forEach(point => {
         maxAbsX = Math.max(maxAbsX, Math.abs(point.logFC));
       });
       
@@ -64,7 +172,7 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
       
       // Find max y value
       let maxY = 0;
-      data.forEach(point => {
+      currentData.forEach(point => {
         maxY = Math.max(maxY, point.negLogP);
       });
       
@@ -74,7 +182,7 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
       setXDomain([-paddedX, paddedX]);
       setYDomain([0, paddedY]);
     }
-  }, [data]);
+  }, [currentData]);
 
   // Group data points based on thresholds
   const categorizePoints = () => {
@@ -82,7 +190,7 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
     const downRegulated: VolcanoPoint[] = [];
     const notSignificant: VolcanoPoint[] = [];
 
-    data.forEach(point => {
+    currentData.forEach(point => {
       // Skip invalid points but allow negLogP = 0
       if (isNaN(point.negLogP) || isNaN(point.logFC)) {
         return;
@@ -116,18 +224,18 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
 
   useEffect(() => {
     console.log('[volcano] data categorization:', {
-      dataLength: data.length,
+      dataLength: currentData.length,
       upRegulated: upRegulated.length,
       downRegulated: downRegulated.length,
       notSignificant: notSignificant.length,
       fcThreshold,
       pThreshold,
-      sample: data.length > 0 ? {
-        first: data[0],
-        hasValidValues: !isNaN(data[0].logFC) && !isNaN(data[0].negLogP)
+      sample: currentData.length > 0 ? {
+        first: currentData[0],
+        hasValidValues: !isNaN(currentData[0].logFC) && !isNaN(currentData[0].negLogP)
       } : null
     });
-  }, [data, upRegulated, downRegulated, notSignificant]);
+  }, [currentData, upRegulated, downRegulated, notSignificant]);
 
   return (
     <div
@@ -144,12 +252,137 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
         position: "relative"
       }}
     >
+      {/* Group Information and Reference Group Selector */}
+      {groups.length > 0 && (
+        <div
+          style={{
+            padding: "12px 15px",
+            borderBottom: "1px solid #444",
+            backgroundColor: "#1e1e1e",
+            display: "flex",
+            alignItems: "center",
+            gap: "20px",
+            flexWrap: "wrap"
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ color: "#aaa", fontSize: "13px", fontWeight: "600" }}>
+              Groups: {groups.length}
+            </span>
+            <span style={{ color: "#888", fontSize: "12px" }}>
+              ({groups.join(", ")})
+            </span>
+          </div>
+
+          {groups.length > 2 && (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <label
+                htmlFor="reference-group-select"
+                style={{
+                  color: "#aaa",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  marginBottom: 0
+                }}
+              >
+                Reference Group:
+              </label>
+              <select
+                id="reference-group-select"
+                value={selectedReferenceGroup || ""}
+                onChange={(e) => setSelectedReferenceGroup(e.target.value)}
+                style={{
+                  padding: "6px 10px",
+                  backgroundColor: "#333",
+                  color: "#fff",
+                  border: "1px solid #555",
+                  borderRadius: "4px",
+                  fontSize: "12px",
+                  cursor: "pointer"
+                }}
+                disabled={isLoadingPairwise}
+              >
+                {groups.map((group) => (
+                  <option key={group} value={group}>
+                    {group}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={handleApplyReferenceGroup}
+                disabled={!selectedReferenceGroup || isLoadingPairwise}
+                style={{
+                  padding: "6px 14px",
+                  backgroundColor: selectedReferenceGroup ? "#0078d4" : "#555",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "4px",
+                  fontSize: "12px",
+                  fontWeight: "600",
+                  cursor: selectedReferenceGroup && !isLoadingPairwise ? "pointer" : "not-allowed",
+                  opacity: isLoadingPairwise ? 0.7 : 1
+                }}
+              >
+                {isLoadingPairwise ? "Applying..." : "Apply"}
+              </button>
+            </div>
+          )}
+
+          {Object.keys(pairwiseVolcanos).length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <label
+                htmlFor="pairwise-contrast-select"
+                style={{
+                  color: "#aaa",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  marginBottom: 0
+                }}
+              >
+                Comparison:
+              </label>
+              <select
+                id="pairwise-contrast-select"
+                value={currentContrast}
+                onChange={(e) => {
+                  const contrast = e.target.value;
+                  console.log('[volcano] Switching to contrast:', contrast);
+                  setCurrentContrast(contrast);
+                  const contrastData = pairwiseVolcanos[contrast];
+                  if (contrastData && contrastData.volcano_data) {
+                    console.log('[volcano] Setting currentData for', contrast, ':', contrastData.volcano_data.length, 'points');
+                    setCurrentData(contrastData.volcano_data);
+                  } else {
+                    console.warn('[volcano] No data found for contrast:', contrast);
+                  }
+                }}
+                style={{
+                  padding: "6px 10px",
+                  backgroundColor: "#333",
+                  color: "#fff",
+                  border: "1px solid #555",
+                  borderRadius: "4px",
+                  fontSize: "12px",
+                  cursor: "pointer"
+                }}
+              >
+                {Object.keys(pairwiseVolcanos).map((contrast) => (
+                  <option key={contrast} value={contrast}>
+                    {contrast}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Expand Button */}
       <button
         onClick={handleExpand}
         style={{
           position: "absolute",
-          top: "10px",
+          top: groups.length > 0 ? "60px" : "10px",
           right: "10px",
           background: "transparent",
           border: "none",
@@ -169,6 +402,23 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
       >
         ⛶
       </button>
+      
+      {groups.length > 2 && !appliedReferenceGroup ? (
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexDirection: "column",
+            gap: "15px",
+            color: "#888",
+            minHeight: 0
+          }}
+        >
+          <div style={{ fontSize: "16px", fontWeight: "500" }}>Please select and apply a reference group to view volcano plot</div>
+        </div>
+      ) : (
       <div style={{ flex: 1, minHeight: 0 }}>
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 15, right: 30, bottom: 20, left: 20 }}>
@@ -293,8 +543,10 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
           </ScatterChart>
         </ResponsiveContainer>
       </div>
+      )}
       
-      {/* Threshold inputs */}
+      {/* Threshold inputs - only show when plot is visible */}
+      {(groups.length <= 2 || appliedReferenceGroup) && (
       <div
         style={{
           display: "flex",
@@ -343,6 +595,7 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data }) => {
           />
         </div>
       </div>
+      )}
 
       {/* Full Screen Modal */}
       {isModalOpen && (

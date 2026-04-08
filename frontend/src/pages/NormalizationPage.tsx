@@ -36,9 +36,7 @@ const NormalizationPage: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
 
   const [entries, setEntries] = React.useState<string[]>([]);
-  const [selectedReference, setSelectedReference] =
-    React.useState<string>("iRT-Kit_WR_fusion");
-
+  const [selectedReference, setSelectedReference] = React.useState<string>("iRT-Kit_WR_fusion");
   const [method, setMethod] = React.useState<string>("reference");
   const [statisticOption, setStatisticOption] = React.useState<string>("mean");
   const [normalizing, setNormalizing] = React.useState(false);
@@ -180,6 +178,7 @@ const NormalizationPage: React.FC = () => {
           dataset_id,
           method,
           reference: referenceValue,
+          statistic: statisticOption,
         },
         {
           headers: {
@@ -222,11 +221,65 @@ const NormalizationPage: React.FC = () => {
     fetchEntries();
   }, [fetchEntries]);
 
+  // Load saved parameters and fetch normalized data
   React.useEffect(() => {
-    if (entries.length) {
-      fetchNormalizedData();
-    }
-  }, [fetchNormalizedData, entries]);
+    if (!entries.length) return;
+
+    const dataset_id = localStorage.getItem("selectedDatasetId");
+    const token = localStorage.getItem("token");
+    if (!dataset_id || !token) return;
+
+    setLoading(true);
+    setError(null);
+
+    // Try to load saved normalization parameters and data
+    axios
+      .get(API_ENDPOINTS.NORMAL, {
+        headers: { Authorization: `Token ${token}` },
+        params: { dataset_id }
+      })
+      .then((response) => {
+        // Check if normalized data exists (by checking if density_patient plots exist)
+        const hasPlots = response.data?.density_patient?.plots && Array.isArray(response.data.density_patient.plots) && response.data.density_patient.plots.length > 0;
+        
+        if (!response.data.error && hasPlots) {
+          // Restore saved normalization parameters (use defaults if fields are null)
+          const savedMethod = response.data.method || "reference";
+          const savedStatistic = response.data.statistic || "mean";
+          const savedReference = response.data.reference || "iRT-Kit_WR_fusion";
+          
+          setMethod(savedMethod);
+          setStatisticOption(savedStatistic);
+          setSelectedReference(savedReference);
+          
+          // Set plot data from the response
+          const plotResponse: PlotResponse = {
+            density_patient: {
+              plots: response.data.density_patient.plots,
+              limits: response.data.density_patient?.limits || { lower: 0, upper: 0 },
+            },
+            density_case: {
+              plots: response.data.density_case?.plots || [],
+            },
+          };
+          setPlotData(plotResponse);
+          setNormalizationApplied(true);
+          console.log("Normalization restored:", { method: savedMethod, reference: savedReference, statistic: savedStatistic });
+        } else {
+          // No normalization exists yet
+          setNormalizationApplied(false);
+          setPlotData(null);
+        }
+        setLoading(false);
+      })
+      .catch((err) => {
+        // No saved normalization exists yet, show "Ready to Normalize" message
+        console.log("No normalization data found:", err.message);
+        setNormalizationApplied(false);
+        setPlotData(null);
+        setLoading(false);
+      });
+  }, [entries]);
 
   const canNormalize =
     !normalizing &&

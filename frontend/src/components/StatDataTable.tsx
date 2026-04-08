@@ -73,7 +73,7 @@ const StatDataTable: React.FC<StatDataTableProps> = ({ data }) => {
               {row.name}
             </td>
             <td style={{ border: "1px solid #444", padding: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {row.value}
+              {row.value.toFixed(3)}
             </td>
           </tr>
         ))}

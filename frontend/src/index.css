@@ -13,6 +13,8 @@ body, html {
   overflow: hidden;
   background-color: #1E1E1E; /* Dark gray background */
   color: #E0E0E0; /* Light gray text */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {

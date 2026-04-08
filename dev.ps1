@@ -4,7 +4,7 @@
 .DESCRIPTION
   Run with: .\dev.ps1 <command>
   Available commands: build, run, logs, logs-backend, logs-frontend, logs-db, logs-web,
-                      down, nuke, reset-db, update, ps, exec-backend, help
+                      down, nuke, reset-db, update, ps, exec-backend, migrate, help
 #>
 
 param (
@@ -22,6 +22,7 @@ function Show-Help {
     Write-Host "  stop           : Stop app/containers"
     Write-Host "  update         : Pull latest code and rebuild images if needed"
     Write-Host "  status         : List running containers"
+    Write-Host "  migrate        : Create and apply Django migrations (makemigrations + migrate)"
     Write-Host "  help           : Show this message"
     Write-Host "  logs           : Follow logs for all services"
     Write-Host "  logs-backend   : Backend logs"
@@ -38,7 +39,7 @@ switch ($cmd.ToLower()) {
 
     "build" {
         Write-Host "Building Docker images..."
-        & $DOCKER $COMPOSE build
+        & $DOCKER $COMPOSE build --no-cache
     }
 
     "run" {
@@ -105,12 +106,23 @@ switch ($cmd.ToLower()) {
 
     "rebuild" {
         Write-Host "Rebuilding and restarting containers..."
-        & $DOCKER $COMPOSE build
+        & $DOCKER $COMPOSE build --no-cache
         & $DOCKER $COMPOSE down
         & $DOCKER $COMPOSE up -d
+        Write-Host "Running migrations..."
+        & $DOCKER $COMPOSE exec -T backend python manage.py makemigrations app
+        & $DOCKER $COMPOSE exec -T backend python manage.py migrate
         Write-Host "Application started at http://localhost:3000"
         Write-Host "Opening browser..."
         Start-Process "http://localhost:3000"
+    }
+
+    "migrate" {
+        Write-Host "Creating migrations for model changes..."
+        & $DOCKER $COMPOSE exec -T backend python manage.py makemigrations app
+        Write-Host "Applying migrations..."
+        & $DOCKER $COMPOSE exec -T backend python manage.py migrate
+        Write-Host "Migrations complete!"
     }
 
     "status" { & $DOCKER $COMPOSE ps }

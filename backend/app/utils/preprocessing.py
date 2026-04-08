@@ -221,6 +221,9 @@ def reference_normalization(raw_data, reference_entry='iRT-Kit_WR_fusion') -> pd
 
     df[normalized_df.columns] = normalized_df
 
+    # Exclude the reference row from the output
+    df = df[df[ref_col] != reference_entry]
+
     # Keep NaNs for downstream numeric processing; do not convert to Python None here.
     return df
 
@@ -351,7 +354,7 @@ def transformation(raw_data, epsilon=1e-6) -> pd.DataFrame:
     
     Parameters:
         raw_data (pd.DataFrame): DataFrame containing numeric data.
-        epsilon (float): Small value added to avoid log2(0). Default is 1e-6.
+        epsilon (float): Small value added to avoid log2(0). Default is 1e-6 to preserve signal in low-expression regions.
     
     Returns:
         pd.DataFrame: Log2-transformed DataFrame.

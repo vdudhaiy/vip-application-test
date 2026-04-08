@@ -20,6 +20,10 @@ export const API_ENDPOINTS = {
   TRANSFORM: `${API_BASE_URL}/api/transform`,
   IMPUTE: `${API_BASE_URL}/api/impute`,
   ANALYSIS: `${API_BASE_URL}/api/analysis`,
+  VOLCANO_PLOT_DATA: `${API_BASE_URL}/api/volcano-plot-data`,
+  HEATMAP_DATA: `${API_BASE_URL}/api/heatmap-data`,
+  RUN_TTEST: `${API_BASE_URL}/api/run-ttest`,
+  TTEST_RESULTS: `${API_BASE_URL}/api/ttest-results`,
   CHANGE_PASSWORD: `${API_BASE_URL}/api/change-password`,
   UPDATE_PROFILE: `${API_BASE_URL}/api/update-profile`,
 };

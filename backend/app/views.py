@@ -28,7 +28,7 @@ from .utils.analysis import (
     prepare_pairwise_volcanos,
 )
 from .utils.histogram_processing import density_by_patient, density_by_case
-from .models import Dataset, RawDataUpload, GroupDataUpload, FilterData, NormalizedData, TransformedData, ImputeData
+from .models import Dataset, RawDataUpload, GroupDataUpload, FilterData, NormalizedData, TransformedData, ImputeData, TtestResults
 
 # Logger
 import logging
@@ -181,19 +181,24 @@ class RawDataUploadView(APIView):
         raw_instance = dataset.raw_file or RawDataUpload()
 
         # Serialize and save RawDataUpload
-        serializer = RawDataUploadSerializer(raw_instance, data={'spec_data_file': file}, partial=True)
-        
-        if serializer.is_valid():
-            raw_instance = serializer.save()
+        try:
+            serializer = RawDataUploadSerializer(raw_instance, data={'spec_data_file': file}, partial=True)
+            
+            if serializer.is_valid():
+                raw_instance = serializer.save()
 
-            # Link to dataset
-            dataset.raw_file = raw_instance
-            dataset.save()
+                # Link to dataset
+                dataset.raw_file = raw_instance
+                dataset.save()
 
-            return Response({"message": "File uploaded and associated with dataset", "dataset_id": dataset.id}
-                            , status=status.HTTP_200_OK)
+                return Response({"message": "File uploaded and associated with dataset", "dataset_id": dataset.id, "num_entries": raw_instance.num_entries}
+                                , status=status.HTTP_200_OK)
 
-        return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+            logger.error(f"RawDataUpload serializer validation failed: {serializer.errors}")
+            return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"RawDataUpload error: {str(e)}", exc_info=True)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
     def get(self, request):
         try:
@@ -278,13 +283,20 @@ class DataView(APIView):
             
             dataset = get_object_or_404(Dataset, id=dataset_id, user=user)
 
+            # Add defensive checks with detailed error messages
+            if not dataset.raw_file:
+                return Response({"error": "Raw data file not uploaded for this dataset"}, status=status.HTTP_400_BAD_REQUEST)
+            
             spec_data = dataset.raw_file.spec_data
             if not spec_data:
-                return Response({"error": "mass spec data does not exist"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": "Mass spec data could not be parsed from raw file"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not dataset.group_file:
+                return Response({"error": "Group/classification file not uploaded for this dataset"}, status=status.HTTP_400_BAD_REQUEST)
             
             group_data = dataset.group_file.grouping
             if not group_data:
-                return Response({"error": "grouping data does not exist"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": "Grouping information could not be parsed from group file"}, status=status.HTTP_400_BAD_REQUEST)
             
             density_patient = density_by_patient(pd.DataFrame(spec_data['data']))
             density_case = density_by_case(pd.DataFrame(spec_data['data']), group_data['grouping'])
@@ -292,7 +304,8 @@ class DataView(APIView):
 
             return Response(density_plots, status=status.HTTP_200_OK)
         except Exception as e:
-            return Response({"error": str(e)}, status=400)
+            logger.error(f"DataView error: {str(e)}", exc_info=True)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class FilterView(APIView):
@@ -309,12 +322,13 @@ class FilterView(APIView):
 
             filter = dataset.filtered_data
             if not filter:
-                return Response({"error": "filter does not exist"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": "Filter has not been created yet. Please upload both raw data and group files first, then set filter parameters."}, status=status.HTTP_400_BAD_REQUEST)
             
             serializer = FilterSerializer(filter)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
-            return Response({"error": str(e)}, status=400)
+            logger.error(f"FilterView GET error: {str(e)}", exc_info=True)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
     def post(self, request):
         # Post request makes updates to filter and returns updated filter data as well
@@ -359,10 +373,11 @@ class FilterView(APIView):
             logger.error("Filter serializer validation failed: %s", serializer.errors)
             # Also include the raw incoming data for additional context
             logger.error("Filter request raw data: %s", request.data)
-            return Response(serializer.errors, status=400)
+            return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
             
         except Exception as e:
-            return Response({"error": str(e)}, status=400)
+            logger.error(f"FilterView POST error: {str(e)}", exc_info=True)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class NormalView(APIView):
@@ -414,6 +429,7 @@ class NormalView(APIView):
             dataset_id = request.data.get('dataset_id')
             method = request.data.get('method', "reference")
             reference = request.data.get('reference', {})
+            statistic = request.data.get('statistic', "mean")  # Default statistic
 
             if not dataset_id:
                 return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -433,6 +449,11 @@ class NormalView(APIView):
             if not dataset.normal_data:
                 dataset.normal_data = NormalizedData.objects.get_or_create(filter_model=dataset.filtered_data)[0]
             
+            # Save the normalization parameters for future restoration
+            dataset.normal_data.method = method
+            dataset.normal_data.reference = reference
+            dataset.normal_data.statistic = statistic
+            
             # Normalize with the selected reference and method
             dataset.normal_data.normalize(reference=reference, method=method)
             
@@ -447,6 +468,7 @@ class NormalView(APIView):
 
 class TransformView(APIView):
     permission_classes = [IsAuthenticated]
+    
     def get(self, request):
         try:
             user = request.user
@@ -466,6 +488,33 @@ class TransformView(APIView):
             dataset.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
+            return Response({"error": str(e)}, status=400)
+    
+    def post(self, request):
+        try:
+            user = request.user
+            dataset_id = request.data.get('dataset_id')
+            epsilon = request.data.get('epsilon', 1e-6)
+
+            if not dataset_id:
+                return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            dataset = get_object_or_404(Dataset, id=dataset_id, user=user)
+            
+            # Ensure transformed_data exists
+            if not dataset.transformed_data or not dataset.normal_data:
+                return Response({"error": "normalized data must exist before transformation"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Apply transformation with the specified epsilon
+            dataset.transformed_data.transform(epsilon=float(epsilon))
+            
+            # Trigger downstream pipeline
+            dataset.save()
+            
+            serializer = TransformSerializer(dataset.transformed_data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Error in TransformView POST: {str(e)}", exc_info=True)
             return Response({"error": str(e)}, status=400)
 
 
@@ -507,55 +556,195 @@ def sanitize_for_json(obj):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def get_analysis_data(request):
+def get_volcano_plot_data(request):
+    """
+    Get volcano plot preparation data for visualization.
+    
+    Query Parameters:
+    - dataset_id: Required
+    - reference_group: Optional (for multi-group comparisons)
+    - log2fc_thresh: Log2 fold-change threshold (default: 0.58)
+    - qval_thresh: q-value threshold (default: 0.05)
+    - pval_thresh: p-value threshold (default: 0.05)
+    """
     try:
         user = request.user
         dataset_id = request.query_params.get('dataset_id')
+        reference_group = request.query_params.get('reference_group', None)
+        log2fc_thresh = float(request.query_params.get('log2fc_thresh', 0.58))
+        qval_thresh = float(request.query_params.get('qval_thresh', 0.05))
+        pval_thresh = float(request.query_params.get('pval_thresh', 0.05))
 
         if not dataset_id:
             return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         dataset = get_object_or_404(Dataset, id=dataset_id, user=user)
 
-        imputed_data = dataset.impute_data.impute_data['data']
-        case_control = dataset.impute_data.grouping['grouping']
+        if not dataset.impute_data:
+            return Response({"error": "Imputed data does not exist. Complete the preprocessing pipeline first."}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+
+        if not dataset.impute_data.impute_data or not dataset.impute_data.grouping:
+            return Response({"error": "Imputed data or grouping information is missing."}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+
+        imputed_data = dataset.impute_data.impute_data.get('data')
+        case_control = dataset.impute_data.grouping.get('grouping')
+
+        if not imputed_data or not case_control:
+            return Response({"error": "Imputed data or grouping is empty."}, 
+                          status=status.HTTP_400_BAD_REQUEST)
 
         df = pd.DataFrame(imputed_data)
-        # Assume first column is non-numeric identifier (e.g., protein/gene names)
-        protein_gene_col = df.iloc[:, 0]  # Series is simpler than creating a DataFrame
-
+        protein_gene_col = df.iloc[:, 0]
         protein_gene_df = pd.DataFrame({'Protein': protein_gene_col})
 
-        # Keep only numeric columns for analysis
         numeric_df = df.select_dtypes(include=[np.number])
+        numeric_df.insert(0, 'Protein', protein_gene_col)
+        df = numeric_df
 
-        # Add the Protein/Gene column back safely at the front
+        result_df = final_data_analysis(df, case_control, protein_gene_df, reference_group=reference_group)
+        
+        # Extract unique groups in order
+        groups = list(dict.fromkeys(case_control))
+        
+        # Prepare volcano data based on number of groups
+        if len(groups) > 2 and reference_group:
+            # Multiple groups with reference group specified - use pairwise volcanoes
+            volcano_payloads = prepare_pairwise_volcanos(
+                df,
+                case_control,
+                protein_gene_df,
+                reference_group=reference_group,
+                log2fc_thresh=log2fc_thresh,
+                qval_thresh=qval_thresh,
+                pval_thresh=pval_thresh
+            )
+            volcano_json = {
+                "pairwise_volcanos": {},
+                "reference_group": reference_group,
+                "groups": groups
+            }
+            # Convert each pairwise volcano to JSON
+            for contrast_label, payload in volcano_payloads.items():
+                try:
+                    volcano_data_df = payload.get("volcano_data")
+                    if volcano_data_df is None:
+                        raise ValueError(f"volcano_data is None for {contrast_label}")
+                    volcano_data_records = json.loads(volcano_data_df.to_json(orient='records'))
+                    volcano_json["pairwise_volcanos"][contrast_label] = {
+                        "volcano_data": volcano_data_records,
+                        "thresholds": sanitize_for_json(payload.get("thresholds", {}))
+                    }
+                except Exception as e:
+                    logger.error(f"Error serializing pairwise volcano {contrast_label}: {str(e)}", exc_info=True)
+        else:
+            # Two groups or no reference specified - use standard single volcano
+            volcano = prepare_volcano(
+                result_df,
+                log2fc_thresh=log2fc_thresh,
+                qval_thresh=qval_thresh,
+                pval_thresh=pval_thresh
+            )
+            try:
+                volcano_data_df = volcano.get("volcano_data")
+                if volcano_data_df is None:
+                    raise ValueError("volcano_data is None")
+                volcano_data_records = json.loads(volcano_data_df.to_json(orient='records'))
+            except Exception as e:
+                logger.error(f"Error serializing volcano data: {str(e)}", exc_info=True)
+                volcano_data_records = []
+            
+            volcano_json = {
+                "volcano_data": volcano_data_records,
+                "thresholds": sanitize_for_json(volcano.get("thresholds", {})),
+                "groups": groups
+            }
+
+        return Response(volcano_json, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Error in get_volcano_plot_data: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_heatmap_data(request):
+    """
+    Get heatmap preparation data for visualization.
+    
+    Query Parameters:
+    - dataset_id: Required
+    - top_n: Number of top proteins to include (default: 20)
+    - aggregate_to_protein_level: Whether to aggregate to protein level (default: true)
+    - aggregation_method: Method for aggregation - 'mean' or 'median' (default: mean)
+    - by: Metric to rank proteins - 'p_value' or 'log2FC' (default: p_value)
+    """
+    try:
+        user = request.user
+        dataset_id = request.query_params.get('dataset_id')
+        top_n = request.query_params.get('top_n', 20)
+        aggregate_to_protein_level = request.query_params.get('aggregate_to_protein_level', 'true').lower() == 'true'
+        aggregation_method = request.query_params.get('aggregation_method', 'mean')
+        by = request.query_params.get('by', 'p_value')
+
+        # Validate parameters
+        if aggregation_method not in ['mean', 'median']:
+            aggregation_method = 'mean'
+        
+        if by not in ['p_value', 'log2FC']:
+            by = 'p_value'
+        
+        try:
+            top_n = int(top_n)
+            if top_n < 1:
+                top_n = 20
+        except (ValueError, TypeError):
+            top_n = 20
+
+        if not dataset_id:
+            return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        dataset = get_object_or_404(Dataset, id=dataset_id, user=user)
+
+        if not dataset.impute_data:
+            return Response({"error": "Imputed data does not exist. Complete the preprocessing pipeline first."}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+
+        if not dataset.impute_data.impute_data or not dataset.impute_data.grouping:
+            return Response({"error": "Imputed data or grouping information is missing."}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+
+        imputed_data = dataset.impute_data.impute_data.get('data')
+        case_control = dataset.impute_data.grouping.get('grouping')
+
+        if not imputed_data or not case_control:
+            return Response({"error": "Imputed data or grouping is empty."}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+
+        df = pd.DataFrame(imputed_data)
+        protein_gene_col = df.iloc[:, 0]
+        protein_gene_df = pd.DataFrame({'Protein': protein_gene_col})
+
+        numeric_df = df.select_dtypes(include=[np.number])
         numeric_df.insert(0, 'Protein', protein_gene_col)
         df = numeric_df
 
         result_df = final_data_analysis(df, case_control, protein_gene_df)
-        volcano = prepare_volcano(result_df)
-        top_proteins = select_top_proteins(result_df, n=20, by='p_value')
-        heatmap = prepare_heatmap(df, top_proteins, case_control)
-
-        # Convert DataFrame safely
-        result_json = json.loads(result_df.to_json(orient='records'))
-
-        # Sanitize volcano data: convert DataFrame to JSON records
-        try:
-            volcano_data_df = volcano.get("volcano_data")
-            if volcano_data_df is None:
-                raise ValueError("volcano_data is None")
-            volcano_data_records = json.loads(volcano_data_df.to_json(orient='records'))
-        except Exception as e:
-            logger.error(f"Error serializing volcano data: {str(e)}", exc_info=True)
-            volcano_data_records = []
         
-        volcano_json = {
-            "volcano_data": volcano_data_records,
-            "thresholds": sanitize_for_json(volcano.get("thresholds", {}))
-        }
+        # Select top proteins based on ranking metric
+        top_proteins = select_top_proteins(result_df, n=top_n, by=by)
+        logger.info(f"[HEATMAP] Selected {len(top_proteins)} unique proteins for top_n={top_n}: {top_proteins}")
         
+        heatmap = prepare_heatmap(
+            df,
+            top_proteins,
+            case_control,
+            aggregate_to_protein_level=aggregate_to_protein_level,
+            aggregation_method=aggregation_method
+        )
+
         # Sanitize heatmap data: convert DataFrame matrix to JSON records
         try:
             heatmap_matrix = heatmap.get("matrix")
@@ -568,7 +757,12 @@ def get_analysis_data(request):
                     "column_labels": heatmap_matrix.columns.tolist(),
                     "row_order": heatmap.get("row_order", []),
                     "col_order": heatmap.get("col_order", []),
-                    "col_group_labels": heatmap.get("col_group_labels", [])
+                    "col_group_labels": heatmap.get("col_group_labels", []),
+                    "value_range": heatmap.get("value_range", {}),
+                    "total_proteins": len(result_df),
+                    "current_top_n": top_n,
+                    "aggregate_to_protein_level": aggregate_to_protein_level,
+                    "aggregation_method": aggregation_method
                 }
             else:
                 heatmap_json = {}
@@ -576,12 +770,84 @@ def get_analysis_data(request):
             logger.error(f"Error serializing heatmap data: {str(e)}", exc_info=True)
             heatmap_json = {}
 
-        return Response({
-            "results": result_json,
-            "volcano": volcano_json,
-            "heatmap": heatmap_json
-        }, status=status.HTTP_200_OK)
+        return Response(heatmap_json, status=status.HTTP_200_OK)
 
     except Exception as e:
-        logger.error(f"Error in get_analysis_data: {str(e)}", exc_info=True)
+        logger.error(f"Error in get_heatmap_data: {str(e)}", exc_info=True)
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST', 'GET'])
+@permission_classes([IsAuthenticated])
+def run_ttest_analysis(request):
+    """
+    Run statistical t-test analysis and store results in TtestResults model.
+    
+    POST Parameters (JSON body):
+    - dataset_id: Required
+    - reference_group: Optional reference group for multi-group comparisons
+    
+    GET Parameters (query string):
+    - dataset_id: Required
+    - reference_group: Optional reference group for multi-group comparisons
+    """
+    try:
+        user = request.user
+        
+        # Handle both POST (body) and GET (query params)
+        if request.method == 'POST':
+            dataset_id = request.data.get('dataset_id')
+            reference_group = request.data.get('reference_group', None)
+        else:  # GET
+            dataset_id = request.query_params.get('dataset_id')
+            reference_group = request.query_params.get('reference_group', None)
+
+        if not dataset_id:
+            return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        dataset = get_object_or_404(Dataset, id=dataset_id, user=user)
+
+        if not dataset.ttest_results:
+            return Response({"error": "TtestResults object not initialized. Complete the pipeline first."}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+
+        if not dataset.impute_data or not dataset.impute_data.impute_data:
+            return Response({"error": "Imputed data does not exist"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Run the analysis
+        logger.info(f"Running ttest analysis for dataset {dataset_id} with reference_group={reference_group}")
+        dataset.ttest_results.run_analysis(reference_group=reference_group)
+
+        # Return the results
+        serializer = TtestResultsSerializer(dataset.ttest_results)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Error in run_ttest_analysis: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TtestResultsView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get the ttest results for a dataset"""
+        try:
+            user = request.user
+            dataset_id = request.query_params.get('dataset_id')
+
+            if not dataset_id:
+                return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            dataset = get_object_or_404(Dataset, id=dataset_id, user=user)
+
+            if not dataset.ttest_results or not dataset.ttest_results.results_data:
+                return Response({"error": "Ttest results do not exist. Run analysis first."}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+            serializer = TtestResultsSerializer(dataset.ttest_results)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            logger.error(f"Error in TtestResultsView GET: {str(e)}", exc_info=True)
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

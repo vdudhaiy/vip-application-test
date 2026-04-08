@@ -33,13 +33,14 @@ export interface DensityPoint {
 
 interface FilterOptionsProps {
   onFilterChange?: (filters: FilterState) => void;
+  initialState?: FilterState;
 }
 
-const FilterOptions: React.FC<FilterOptionsProps> = ({ onFilterChange }) => {
-  const [filterType, setFilterType] = useState<"percentage" | "number">("percentage");
-  const [subOption, setSubOption] = useState<"inTotal" | "inEach" | "inEither">("inTotal");
-  const [percentageValue, setPercentageValue] = useState<number>(70);
-  const [numberValue, setNumberValue] = useState<number | "">("");
+const FilterOptions: React.FC<FilterOptionsProps> = ({ onFilterChange, initialState }) => {
+  const [filterType, setFilterType] = useState<"percentage" | "number">(initialState?.filterType ?? "percentage");
+  const [subOption, setSubOption] = useState<"inTotal" | "inEach" | "inEither">(initialState?.subOption ?? "inTotal");
+  const [percentageValue, setPercentageValue] = useState<number>(initialState?.percentageValue ?? 70);
+  const [numberValue, setNumberValue] = useState<number | "">(initialState?.numberValue ?? "");
 
   const handleFilterTypeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     console.log("Frontend: Filter type changed to:", event.target.value);
@@ -62,6 +63,17 @@ const FilterOptions: React.FC<FilterOptionsProps> = ({ onFilterChange }) => {
     console.log("Frontend: Number value changed to:", value);
     setNumberValue(value);
   };
+
+  // Sync initialState prop changes to component state
+  React.useEffect(() => {
+    if (initialState) {
+      setFilterType(initialState.filterType);
+      setSubOption(initialState.subOption);
+      setPercentageValue(initialState.percentageValue);
+      setNumberValue(initialState.numberValue);
+      console.log("Frontend: Restored filter state from parent:", initialState);
+    }
+  }, [initialState]);
 
   React.useEffect(() => {
     console.log("Frontend: Applying filter with state:", {

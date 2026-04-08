@@ -1,4 +1,4 @@
-import React, { ReactNode, useState } from "react";
+import React, { ReactNode, useState, useRef, useEffect } from "react";
 import type { FilterState, PlotResponse } from "./FilterOptions";
 import API_ENDPOINTS from '../config/api';
 
@@ -22,6 +22,73 @@ const FilterPageTemplate: React.FC<FilterPageTemplateProps> = ({
   const [filterState, setFilterState] = useState<FilterState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasFiltersApplied, setHasFiltersApplied] = useState(initialFiltersApplied);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Fetch existing filter parameters from API on mount
+  useEffect(() => {
+    const loadExistingFilters = async () => {
+      try {
+        const dataset_id = localStorage.getItem('selectedDatasetId');
+        const token = localStorage.getItem('token');
+        if (!dataset_id || !token) return;
+
+        const response = await fetch(`${API_ENDPOINTS.FILTER}?dataset_id=${dataset_id}`, {
+          headers: {
+            Authorization: `Token ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.filteroption && data.applyin !== undefined && data.value !== undefined) {
+            // Restore filter state from API
+            const restoredState: FilterState = {
+              filterType: data.filteroption as "percentage" | "number",
+              subOption: data.applyin as "inTotal" | "inEach" | "inEither",
+              percentageValue: data.filteroption === "percentage" ? data.value : 70,
+              numberValue: data.filteroption === "number" ? data.value : ""
+            };
+            setFilterState(restoredState);
+            setHasFiltersApplied(true);
+          }
+        }
+      } catch (err) {
+        console.log("No existing filters found, starting fresh");
+      }
+    };
+
+    loadExistingFilters();
+  }, []);
+
+  // Trigger layout recalculation on zoom or resize
+  useEffect(() => {
+    const resizeObserver = new ResizeObserver(() => {
+      if (contentRef.current) {
+        contentRef.current.style.overflow = "hidden";
+        void contentRef.current.offsetHeight;
+        contentRef.current.style.overflow = "auto";
+      }
+    });
+
+    if (contentRef.current) {
+      resizeObserver.observe(contentRef.current);
+    }
+
+    const handleZoom = () => {
+      if (contentRef.current) {
+        contentRef.current.style.overflow = "hidden";
+        void contentRef.current.offsetHeight;
+        contentRef.current.style.overflow = "auto";
+      }
+    };
+    
+    window.addEventListener("resize", handleZoom);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", handleZoom);
+    };
+  }, []);
 
   const handleApplyFilters = async () => {
     console.log("Frontend: Starting filter application...");
@@ -103,16 +170,21 @@ const FilterPageTemplate: React.FC<FilterPageTemplateProps> = ({
       display: "flex", 
       height: "calc(100vh - 45px)", 
       backgroundColor: "#1e1e1e",
-      position: "relative"
+      position: "relative",
+      minHeight: 0
     }}>
       {/* Main Content */}
-      <div style={{ 
+      <div
+        ref={contentRef}
+        style={{ 
         textAlign: "center", 
         flex: 1, 
         padding: "0px 220px 0px 0px",
         backgroundColor: "#1e1e1e", 
         color: "white",
-        overflow: "auto"
+        overflow: "auto",
+        minHeight: 0,
+        minWidth: 0
       }}> 
         <h2>{title}</h2>
         {children}
@@ -130,7 +202,8 @@ const FilterPageTemplate: React.FC<FilterPageTemplateProps> = ({
         overflow: "auto"
       }}>
         {React.cloneElement(filters as React.ReactElement, {
-          onFilterChange: setFilterState
+          onFilterChange: setFilterState,
+          initialState: filterState
         })}
 
         <button

@@ -59,20 +59,36 @@ const FilterPage: React.FC = () => {
     setLoading(true);
     const dataset_id = localStorage.getItem('selectedDatasetId')
     const token = localStorage.getItem('token')
-    axios.get(`${API_ENDPOINTS.DATA}?dataset_id=${dataset_id}`, {
+    
+    // First, check if there are existing filter parameters
+    axios.get(`${API_ENDPOINTS.FILTER}?dataset_id=${dataset_id}`, {
       headers: {
         Authorization: `Token ${token}`,
       },
     })
       .then(response => {
+        // Filter data exists - this means filters were previously applied
         setPlotData(response.data);
         setFiltersApplied(true);
         setLoading(false);
       })
       .catch(err => {
-        console.error('Error fetching density data:', err);
-        setError('Failed to load density data');
-        setLoading(false);
+        // No filter data exists, fetch the original unfiltered density data
+        axios.get(`${API_ENDPOINTS.DATA}?dataset_id=${dataset_id}`, {
+          headers: {
+            Authorization: `Token ${token}`,
+          },
+        })
+          .then(response => {
+            setPlotData(response.data);
+            setFiltersApplied(false);
+            setLoading(false);
+          })
+          .catch(err => {
+            console.error('Error fetching density data:', err);
+            setError('Failed to load density data');
+            setLoading(false);
+          });
       });
   }, []);
 

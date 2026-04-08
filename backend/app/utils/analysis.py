@@ -271,8 +271,44 @@ def select_top_proteins(results_df: pd.DataFrame, n: int = 20, by: str = "p_valu
         else:
             df = df.sort_values("log2FC", ascending=False)
 
-    proteins = df["Protein"].dropna().tolist()
+    # Get unique proteins in order (drop duplicates while preserving order)
+    proteins = df["Protein"].drop_duplicates().dropna().tolist()
     return proteins[:n]
+
+
+# -------------------------------
+# Protein-Level Aggregation
+# -------------------------------
+def aggregate_expression_to_protein_level(expr_df: pd.DataFrame, protein_ids: pd.Series, aggregation_method: str = "mean") -> tuple:
+    """
+    Aggregate expression data to protein level (collapsing isoforms/variants).
+
+    Parameters
+    ----------
+    expr_df : pd.DataFrame
+        Expression matrix (rows = data rows, columns = samples).
+    protein_ids : pd.Series
+        Protein IDs corresponding to each row.
+    aggregation_method : str
+        Method for aggregation: "mean" (default) or "median".
+
+    Returns
+    -------
+    tuple
+        - aggregated_expr: DataFrame with rows = unique proteins, columns = samples
+        - aggregated_protein_ids: Series with unique protein IDs
+    """
+    combined_df = expr_df.copy()
+    combined_df['_protein_id'] = protein_ids.values
+    
+    if aggregation_method == "median":
+        aggregated = combined_df.groupby('_protein_id').median()
+    else:  # default to mean
+        aggregated = combined_df.groupby('_protein_id').mean()
+    
+    aggregated_protein_ids = pd.Series(aggregated.index, index=range(len(aggregated)))
+    
+    return aggregated, aggregated_protein_ids
 
 
 # -------------------------------
@@ -474,7 +510,7 @@ def prepare_pairwise_volcanos(
 # -------------------------------
 # Heatmap Preparation
 # -------------------------------
-def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bool = True):
+def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bool = True, aggregate_to_protein_level: bool = True, aggregation_method: str = "mean"):
     """
     Prepare a clustered expression matrix for heatmap visualization.
 
@@ -488,15 +524,23 @@ def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bo
         Group label for each sample column (same order as columns 1..n).
     row_zscore : bool
         Apply row-wise z-score scaling before clustering to enhance contrast.
+    aggregate_to_protein_level : bool
+        If True (default), aggregate expression data to protein level (collapsing isoforms).
+        If False, keep isoform-level data.
+    aggregation_method : str
+        Method for aggregation: "mean" (default) or "median".
 
     Returns
     -------
     dict
-        - matrix: clustered expression matrix (rows=proteins, cols=samples)
-        - row_order: order of proteins after clustering
+        - matrix: clustered expression matrix (rows=proteins or isoforms, cols=samples)
+        - row_order: order of proteins/isoforms after clustering
         - col_order: order of samples (grouped by provided labels)
     """
 
+    import logging
+    logger = logging.getLogger(__name__)
+    
     df = pd.DataFrame(raw_df).copy()
     if df.shape[1] < 2:
         raise ValueError("raw_df must contain an identifier column and at least one sample column.")
@@ -515,6 +559,16 @@ def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bo
 
     if len(expr) == 0:
         raise ValueError(f"No proteins from {proteins} found in raw_df.")
+
+    logger.info(f"[HEATMAP] Filtered to {len(proteins)} proteins: {len(expr)} rows ({len(expr)/len(proteins):.1f} rows/protein avg)")
+
+    # Optionally aggregate to protein level
+    if aggregate_to_protein_level:
+        expr, protein_ids = aggregate_expression_to_protein_level(expr, protein_ids, aggregation_method=aggregation_method)
+        expr = expr.reset_index(drop=True)
+        protein_ids = protein_ids.reset_index(drop=True)
+        logger.info(f"[HEATMAP] Aggregated to protein level using {aggregation_method}: {len(expr)} unique proteins")
+
 
     # Order columns by group appearance
     groups_ordered = list(dict.fromkeys(group_labels))
@@ -580,7 +634,10 @@ def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bo
     matrix = matrix[grouped_col_order]
 
     # Hierarchical clustering on rows
-    row_order = matrix.index.tolist()
+    # IMPORTANT: Keep integer position order, don't convert to labels yet
+    # (because we have duplicate protein IDs in the index, .loc[] with duplicates will return multiple matching rows)
+    row_order_positions = list(range(matrix.shape[0]))  # Integer positions: [0, 1, 2, ..., n-1]
+    
     if matrix.shape[0] > 1:
         try:
             distances = pdist(matrix, metric="correlation")
@@ -594,27 +651,44 @@ def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bo
                 else:
                     linkage_matrix = linkage(distances, method="average")
                     order = leaves_list(linkage_matrix)
-                    row_order = [matrix.index[i] for i in order]
+                    row_order_positions = order.tolist() if hasattr(order, 'tolist') else list(order)
             else:
                 linkage_matrix = linkage(distances, method="average")
                 order = leaves_list(linkage_matrix)
-                row_order = [matrix.index[i] for i in order]
+                row_order_positions = order.tolist() if hasattr(order, 'tolist') else list(order)
         except Exception as e:
             logger.warning("Row clustering failed: %s. Using original protein order.", e)
     
-    # Reorder matrix by clustered rows
-    matrix = matrix.loc[row_order]
+    # Reorder matrix by clustered rows USING INTEGER POSITIONS (.iloc) NOT LABELS (.loc)
+    # This is critical: .loc[] with duplicate index labels would expand rows unexpectedly
+    matrix = matrix.iloc[row_order_positions]
+    
+    # Extract row labels in the new order for response
+    row_order = matrix.index.tolist()
 
     # Group labels aligned to the final column order
     col_group_labels = [group_lookup[c] for c in matrix.columns]
+
+    # Calculate value range for color scale
+    matrix_min = matrix.min().min()
+    matrix_max = matrix.max().max()
+    
+    # Add some padding for better color scale
+    value_range = max(abs(matrix_min), abs(matrix_max))
 
     payload = {
         "matrix": matrix,
         "row_order": row_order,
         "col_order": matrix.columns.tolist(),
         "col_group_labels": col_group_labels,
+        "value_range": {
+            "min": float(matrix_min),
+            "max": float(matrix_max),
+            "symmetric_range": float(value_range)
+        }
     }
 
+    logger.info(f"[HEATMAP] Final matrix: {matrix.shape[0]} rows × {matrix.shape[1]} columns")
     return payload
 
 

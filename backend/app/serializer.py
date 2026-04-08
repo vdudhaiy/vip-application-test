@@ -29,6 +29,7 @@ class DatasetSerializer(serializers.ModelSerializer):
     normal_data_id = serializers.PrimaryKeyRelatedField(read_only=True)
     transformed_data_id = serializers.PrimaryKeyRelatedField(read_only=True)
     impute_data_id = serializers.PrimaryKeyRelatedField(read_only=True)
+    ttest_results_id = serializers.PrimaryKeyRelatedField(read_only=True)
     
     class Meta:
         model = Dataset
@@ -43,7 +44,8 @@ class DatasetSerializer(serializers.ModelSerializer):
             'filtered_data_id',
             'normal_data_id',
             'transformed_data_id',
-            'impute_data_id'
+            'impute_data_id',
+            'ttest_results_id'
         ]
     
 class RawDataUploadSerializer(serializers.ModelSerializer):
@@ -145,3 +147,16 @@ class ImputeSerializer(serializers.ModelSerializer):
             return density_by_case(pd.DataFrame.from_records(obj.impute_data['data']), obj.grouping['grouping'])
         else:
             return None
+
+
+class TtestResultsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TtestResults
+        fields = [
+            'id',
+            'reference_group',
+            'num_proteins',
+            'created_at',
+            'updated_at',
+            'results_data'
+        ]
