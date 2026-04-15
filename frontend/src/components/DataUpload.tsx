@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 // import { useAuth } from '../components/UserAuth';
 import Papa from "papaparse";
-import ExcelJS from "exceljs";
 import { openDB } from "idb";
 import axios from "axios";
 import "./DataUpload.css";
@@ -40,7 +39,7 @@ const DataUpload: React.FC<DataUploadProps> = ({ title, uploadEndpoint }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState<boolean>(false);
 
-  // Load CSV/XLSX Data from IndexedDB on component mount
+  // Load CSV Data from IndexedDB on component mount
   useEffect(() => {
     const loadFromDB = async () => {
       try {
@@ -62,7 +61,7 @@ const DataUpload: React.FC<DataUploadProps> = ({ title, uploadEndpoint }) => {
     await db.put(STORE_NAME, csvData, uploadEndpoint);
   }
 
-  // Handle file selection (CSV or XLSX)
+  // Handle file selection (CSV only)
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files || !event.target.files[0]) return;
 
@@ -85,35 +84,8 @@ const DataUpload: React.FC<DataUploadProps> = ({ title, uploadEndpoint }) => {
           delimiter: ",",
           transform: (value: string) => value.trim(),
         });
-      } else if (ext === "xlsx") {
-        // Parse XLSX with ExcelJS
-        const arrayBuffer = await file.arrayBuffer();
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(arrayBuffer);
-
-        // Get first worksheet
-        const worksheet = workbook.worksheets[0];
-        if (!worksheet) {
-          alert("No worksheets found in this XLSX file.");
-          return;
-        }
-
-        // Convert each row to a string[] (like CSV)
-        const sheetData: string[][] = [];
-        worksheet.eachRow((row) => {
-          // row.values often looks like [undefined, col1, col2, ...]
-          // so we slice off the first index
-          const rowValues = (row.values as any[]).slice(1).map((cellVal: any) =>
-            cellVal == null ? "" : String(cellVal)
-          );
-          sheetData.push(rowValues);
-        });
-
-        let csvData = uniformColumnSizes(sheetData);
-        await storeData(csvData);
-        setTableData(csvData);
       } else {
-        alert("Please upload a .csv or .xlsx file.");
+        alert("Please upload a .csv file.");
       }
     } catch (error) {
       console.error("File parse error:", error);
@@ -171,9 +143,10 @@ const DataUpload: React.FC<DataUploadProps> = ({ title, uploadEndpoint }) => {
           <h2 style={{ fontWeight: "bold", margin: 0 }}>{title}</h2>
           <input
             type="file"
-            accept=".csv, .xlsx"
+            accept=".csv"
             onChange={handleFileChange}
           />
+          <span style={{ fontSize: "12px", color: "#666" }}>(CSV only)</span>
         </div>
 
         <button
@@ -204,7 +177,7 @@ const DataUpload: React.FC<DataUploadProps> = ({ title, uploadEndpoint }) => {
           fontSize: "14px",
         }}
       >
-        No data uploaded yet. Please upload a CSV or XLSX file to display.
+        No data uploaded yet. Please upload a CSV file to display.
       </div>
     ) : (
       <div className="data-table-container">

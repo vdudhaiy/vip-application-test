@@ -65,12 +65,8 @@ class RawDataUpload(models.Model):
                 # Ensure we're reading from the beginning
                 self.spec_data_file.seek(0)
                 
-                # Detect file format and load accordingly
-                file_ext = os.path.splitext(self.spec_data_file.name)[1].lower()
-                if file_ext == '.xlsx':
-                    df = pd.read_excel(self.spec_data_file)
-                else:  # Default to CSV
-                    df = pd.read_csv(self.spec_data_file)
+                # Load CSV file format
+                df = pd.read_csv(self.spec_data_file)
                 
                 # Find last leading non-numeric column index (assumed to be ID column)
                 last_text_col_idx = find_last_leading_text_column(df)

@@ -2,13 +2,13 @@ import os
 from django.core.exceptions import ValidationError
 
 def validate_rawdata_file_extension(value):
-    #Ensure uploaded file is either csv or xlsx
+    #Ensure uploaded file is CSV only
     ext = os.path.splitext(value.name)[1].lower()
-    if ext not in ['.csv', '.xlsx']: 
-        raise ValidationError("Unsupported file extension. Allowed: .csv, .xlsx")
+    if ext not in ['.csv']: 
+        raise ValidationError("Unsupported file extension. Allowed: .csv")
 
 def validate_group_file_extension(value):
-    #Ensure uploaded file is either csv or xlsx
+    #Ensure uploaded file is txt or csv
     ext = os.path.splitext(value.name)[1].lower()
 
     if ext not in ['.txt', '.csv']:
