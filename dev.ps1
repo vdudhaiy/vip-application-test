@@ -45,8 +45,23 @@ switch ($cmd.ToLower()) {
     "run" {
         Write-Host "Starting application (detached)..."
         & $DOCKER $COMPOSE up -d
-        Write-Host "Application started at http://localhost:3000"
-        Write-Host "Opening browser..."
+        Write-Host ""
+        Write-Host "Application starting. Port fallback enabled:"
+        Write-Host "  Frontend: tries ports 3000-3004"
+        Write-Host "  Backend:  tries ports 8000-8004"
+        Write-Host ""
+        Write-Host "Checking logs to see actual ports assigned..."
+        Start-Sleep -Seconds 2
+        
+        $frontendLog = & $DOCKER $COMPOSE logs frontend 2>&1 | Select-String "Starting Vite on port|Server will be available at"
+        $backendLog = & $DOCKER $COMPOSE logs backend 2>&1 | Select-String "Available port|Server will be available at"
+        
+        if ($frontendLog) { Write-Host "Frontend: $($frontendLog -join ' | ')" }
+        if ($backendLog) { Write-Host "Backend:  $($backendLog -join ' | ')" }
+        
+        Write-Host ""
+        Write-Host "Note: If ports don't appear above, wait a moment and run: .\dev.ps1 logs"
+        Write-Host "Opening browser to http://localhost:3000 (or check logs for actual port)..."
         Start-Process "http://localhost:3000"
     }
 

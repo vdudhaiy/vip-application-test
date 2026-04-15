@@ -7,6 +7,10 @@ services:
       - DEBUG=True
     ports:
       - "8000:8000"
+      - "8001:8001"
+      - "8002:8002"
+      - "8003:8003"
+      - "8004:8004"
     volumes:
       - ./backend:/app
       - backend_static:/app/static
@@ -18,6 +22,10 @@ services:
     container_name: react_frontend
     ports:
       - "3000:3000"
+      - "3001:3001"
+      - "3002:3002"
+      - "3003:3003"
+      - "3004:3004"
     volumes:
       - ./frontend:/app
       - /app/node_modules
