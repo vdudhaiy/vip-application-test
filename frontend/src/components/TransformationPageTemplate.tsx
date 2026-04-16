@@ -44,8 +44,8 @@ const TransformationPageTemplate: React.FC<TransformationPageTemplateProps> = ({
   }, []);
 
   return (
-    <div id="transformation-page-template" style={{ display: "flex", height: "100vh", backgroundColor: "#1e1e1e", overflow: "hidden", minHeight: 0 }}>
-      <div ref={contentRef} style={{ textAlign: "center", flex: 1, padding: "20px", backgroundColor: "#1e1e1e", color:"white", overflow: "auto", overflowX: "hidden", minHeight: 0, minWidth: 0 }}> 
+    <div id="transformation-page-template" style={{ backgroundColor: "#1e1e1e" }}>
+      <div ref={contentRef} style={{ textAlign: "center", padding: "20px", backgroundColor: "#1e1e1e", color:"white", minHeight: 0, minWidth: 0 }}> 
         <h2>{title}</h2>
         {children}
       </div>

@@ -46,12 +46,9 @@ const StatAnalysisPageTemplate: React.FC<StatAnalysisPageTemplateProps> = ({
 
   return (
     <div id="stat-analysis-page-template" style={{ 
-      display: "flex", 
-      height: "100vh", 
       backgroundColor: "#1e1e1e",
       color: "#ffffff",
       boxSizing: "border-box",
-      minHeight: 0,
     }}>
       <div
         ref={contentRef}

@@ -55,7 +55,7 @@ const DataQualityCheckPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div style={{ backgroundColor: 'rgb(30, 30, 30)', minHeight: '100vh', padding: '20px' }}>
+      <div style={{ backgroundColor: 'rgb(30, 30, 30)', padding: '20px' }}>
         <h2 style={{ 
           fontSize: '15px',
           fontWeight: 'bold',
@@ -75,7 +75,7 @@ const DataQualityCheckPage: React.FC = () => {
 
   if (error) {
     return (
-      <div style={{ backgroundColor: 'rgb(30, 30, 30)', minHeight: '100vh', padding: '20px' }}>
+      <div style={{ backgroundColor: 'rgb(30, 30, 30)', padding: '20px' }}>
         <h2 style={{ 
           fontSize: '15px',
           fontWeight: 'bold',
@@ -98,7 +98,7 @@ const DataQualityCheckPage: React.FC = () => {
 
   if (!plotData) {
     return (
-      <div style={{ backgroundColor: 'rgb(30, 30, 30)', minHeight: '100vh', padding: '20px' }}>
+      <div style={{ backgroundColor: 'rgb(30, 30, 30)', padding: '20px' }}>
         <h2 style={{ 
           fontSize: '15px',
           fontWeight: 'bold',

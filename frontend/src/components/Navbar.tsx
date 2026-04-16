@@ -13,7 +13,6 @@ const Navbar: React.FC<NavbarProps> = ({ activeSection }) => {
   const sections = [
     { name: "Home", path: "/" },
     { name: "Dashboard", path: "/dashboard" },
-    { name: "About", path: "/about" },
     { name: "Feedback", path: "/feedback" }
   ];
 

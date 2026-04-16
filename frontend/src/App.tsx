@@ -2,6 +2,7 @@ import React, { useState, useEffect, Suspense, lazy } from "react";
 import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
+import Footer from "./components/Footer";
 import { useAuth } from "./components/UserAuth";
 
 // Lazy load pages for better code splitting
@@ -16,6 +17,7 @@ const SignupPage = lazy(() => import("./pages/SignUpPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const DatasetPage = lazy(() => import("./pages/DatasetPage"));
 const FeedbackPage = lazy(() => import("./pages/FeedbackPage"));
+const HomePage = lazy(() => import("./pages/HomePage"));
 
 const App: React.FC = () => {
   const [activeSection, setActiveSection] = useState<string>("Data Upload");
@@ -41,8 +43,6 @@ const App: React.FC = () => {
     const path = location.pathname;
     if (path === '/feedback') {
       setActiveSection('Feedback');
-    } else if (path === '/about') {
-      setActiveSection('About');
     } else if (path === '/' || path === '/home') {
       setActiveSection('Home');
     } else if (path === '/dashboard' || path === '/Datasets') {
@@ -119,7 +119,9 @@ const App: React.FC = () => {
             flex: 1,
             backgroundColor: "#1e1e1e",
             overflow: "auto",
-            padding: "20px"
+            padding: "20px",
+            display: "flex",
+            flexDirection: "column"
             
           }}>
             <Suspense fallback={
@@ -146,12 +148,15 @@ const App: React.FC = () => {
                 <Route path="/Transformation" element={<TransformationPage />} />
                 <Route path="/Imputation" element={<ImputationPage />} />
                 <Route path="/StatisticalAnalysis" element={<StatisticalAnalysisPage />} />
-                <Route path="/" element={<h2 style={{ color: "#E0E0E0" }}>Home</h2>} />
-                <Route path="/about" element={<h2 style={{ color: "#E0E0E0" }}>About</h2>} />
+                <Route path="/" element={<HomePage />} />
                 <Route path="/feedback" element={<FeedbackPage />} />
                 <Route path="*" element={<h2 style={{ color: "#E0E0E0" }}>Page Not Found</h2>} />
               </Routes>
             </Suspense>
+            
+            <div style={{ marginTop: "auto" }}>
+              <Footer />
+            </div>
           </div>
         </div>
       </div>

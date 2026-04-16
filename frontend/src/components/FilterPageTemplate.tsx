@@ -167,22 +167,17 @@ const FilterPageTemplate: React.FC<FilterPageTemplateProps> = ({
 
   return (
     <div id="filter-page-template" style={{ 
-      display: "flex", 
-      height: "calc(100vh - 45px)", 
       backgroundColor: "#1e1e1e",
       position: "relative",
-      minHeight: 0
     }}>
       {/* Main Content */}
       <div
         ref={contentRef}
         style={{ 
         textAlign: "center", 
-        flex: 1, 
         padding: "0px 220px 0px 0px",
         backgroundColor: "#1e1e1e", 
         color: "white",
-        overflow: "auto",
         minHeight: 0,
         minWidth: 0
       }}> 
