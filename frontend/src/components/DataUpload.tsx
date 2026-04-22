@@ -39,7 +39,7 @@ const DataUpload: React.FC<DataUploadProps> = ({ title, uploadEndpoint }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState<boolean>(false);
 
-  // Load CSV Data from IndexedDB on component mount
+  // Load CSV Data from IndexedDB on component mount or when uploadEndpoint changes
   useEffect(() => {
     const loadFromDB = async () => {
       try {
@@ -47,11 +47,18 @@ const DataUpload: React.FC<DataUploadProps> = ({ title, uploadEndpoint }) => {
         const storedData = await db.get(STORE_NAME, uploadEndpoint);
         if (storedData) {
           setTableData(storedData);
+        } else {
+          // Clear table if no data exists for this dataset
+          setTableData([]);
         }
       } catch (error) {
         console.error("IndexedDB Load Error:", error);
+        // Clear table on error to avoid showing stale data
+        setTableData([]);
       }
     };
+    // Clear selected file when switching datasets
+    setSelectedFile(null);
     loadFromDB();
   }, [uploadEndpoint]);
 

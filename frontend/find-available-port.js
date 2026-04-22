@@ -4,7 +4,7 @@
  * Exit code: Port number on success, 1 on failure
  */
 
-const net = require('net');
+import net from 'net';
 
 /**
  * Check if a port is available

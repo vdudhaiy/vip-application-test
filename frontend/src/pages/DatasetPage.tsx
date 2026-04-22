@@ -123,56 +123,73 @@ const DatasetUploadPage: React.FC = () => {
   };
 
   const headerStyle: React.CSSProperties = {
-    color: '#E0E0E0',
+    color: '#79c0ff',
     textAlign: 'left',
-    padding: '10px',
-    backgroundColor: '#1E1E1E',
-    borderBottom: '1px solid #555',
+    padding: '14px 16px',
+    backgroundColor: '#21262d',
+    borderBottom: '2px solid #58a6ff',
+    fontWeight: '600',
+    letterSpacing: '0.5px'
   };
 
   const cellStyle: React.CSSProperties = {
-    padding: '10px',
-    borderBottom: '1px solid #444',
-    color: '#E0E0E0',
+    padding: '14px 16px',
+    borderBottom: '1px solid #30363d',
+    color: '#e6edf3',
   };
 
   return (
     <div
       style={{
-        backgroundColor: 'rgb(30, 30, 30)',
-        minHeight: '100vh',
-        padding: '20px',
-        color: '#E0E0E0',
+        backgroundColor: '#0d1117',
+        display: 'flex',
+        flexDirection: 'column',
+        color: '#e6edf3',
         fontFamily: 'sans-serif',
+        width: '100%',
+        gap: '24px'
       }}
     >
-      <h2>My Datasets</h2>
+      <h2 style={{ color: '#e6edf3', margin: '0 0 16px 0' }}>My Datasets</h2>
 
       {/* Create dataset */}
-      <div style={{ marginBottom: '20px' }}>
+      <div style={{ marginBottom: '12px' }}>
         <input
           type="text"
           placeholder="Dataset name"
           value={newDatasetName}
           onChange={(e) => setNewDatasetName(e.target.value)}
           style={{
-            padding: '6px',
+            padding: '8px 12px',
             marginRight: '10px',
-            borderRadius: '4px',
-            border: '1px solid #555',
-            backgroundColor: '#2C2C2C',
-            color: '#E0E0E0',
+            borderRadius: '6px',
+            border: '1px solid #30363d',
+            backgroundColor: '#161b22',
+            color: '#e6edf3',
+            fontSize: '14px',
+            fontFamily: 'inherit'
           }}
         />
         <button
           onClick={handleCreateDataset}
           style={{
-            padding: '6px 12px',
-            backgroundColor: '#444',
-            border: 'none',
-            borderRadius: '4px',
-            color: '#E0E0E0',
+            padding: '8px 16px',
+            background: 'linear-gradient(135deg, #1f6feb 0%, #388bfd 100%)',
+            border: '1px solid #30363d',
+            borderRadius: '6px',
+            color: '#e6edf3',
             cursor: 'pointer',
+            fontWeight: '500',
+            transition: 'all 0.2s ease',
+            fontSize: '14px'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(135deg, #388bfd 0%, #79c0ff 100%)';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(135deg, #1f6feb 0%, #388bfd 100%)';
+            e.currentTarget.style.transform = 'translateY(0)';
           }}
         >
           Create Dataset
@@ -180,7 +197,7 @@ const DatasetUploadPage: React.FC = () => {
       </div>
 
       {/* Dataset list */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '12px' }}>
         <thead>
           <tr>
             <th style={headerStyle}>Name</th>
@@ -191,7 +208,7 @@ const DatasetUploadPage: React.FC = () => {
         </thead>
         <tbody>
           {datasets.map((dataset) => (
-            <tr key={dataset.id} style={{ backgroundColor: '#2C2C2C' }}>
+            <tr key={dataset.id} style={{ backgroundColor: '#161b22' }}>
               <td style={cellStyle}>{dataset.name}</td>
               <td style={cellStyle}>{new Date(dataset.created_at).toLocaleString()}</td>
               <td style={cellStyle}>{new Date(dataset.updated_at).toLocaleString()}</td>
@@ -199,13 +216,32 @@ const DatasetUploadPage: React.FC = () => {
                 <button
                   onClick={() => handleSelectDataset(dataset.id, dataset.name)}
                   style={{
-                    padding: '6px 10px',
-                    backgroundColor: selectedDatasetId === dataset.id ? '#888' : '#444',
-                    color: '#E0E0E0',
-                    border: 'none',
-                    borderRadius: '4px',
+                    padding: '8px 12px',
+                    background: selectedDatasetId === dataset.id 
+                      ? 'linear-gradient(135deg, #3fb950 0%, #5cb85f 100%)'
+                      : 'linear-gradient(135deg, #58a6ff 0%, #79c0ff 100%)',
+                    color: '#e6edf3',
+                    border: '1px solid #30363d',
+                    borderRadius: '6px',
                     cursor: 'pointer',
                     marginRight: '8px',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    const isSelected = selectedDatasetId === dataset.id;
+                    e.currentTarget.style.background = isSelected
+                      ? 'linear-gradient(135deg, #5cb85f 0%, #6ecf70 100%)'
+                      : 'linear-gradient(135deg, #79c0ff 0%, #a0d4ff 100%)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    const isSelected = selectedDatasetId === dataset.id;
+                    e.currentTarget.style.background = isSelected
+                      ? 'linear-gradient(135deg, #3fb950 0%, #5cb85f 100%)'
+                      : 'linear-gradient(135deg, #58a6ff 0%, #79c0ff 100%)';
+                    e.currentTarget.style.transform = 'translateY(0)';
                   }}
                 >
                   {selectedDatasetId === dataset.id ? 'Selected' : 'Select'}
@@ -213,12 +249,23 @@ const DatasetUploadPage: React.FC = () => {
                 <button
                   onClick={() => handleDeleteDataset(dataset.id, dataset.name)}
                   style={{
-                    padding: '6px 10px',
-                    backgroundColor: '#CC6655',
-                    color: '#E0E0E0',
-                    border: 'none',
-                    borderRadius: '4px',
+                    padding: '8px 12px',
+                    background: 'linear-gradient(135deg, #f85149 0%, #ff6b6b 100%)',
+                    color: '#e6edf3',
+                    border: '1px solid #30363d',
+                    borderRadius: '6px',
                     cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #ff8080 100%)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, #f85149 0%, #ff6b6b 100%)';
+                    e.currentTarget.style.transform = 'translateY(0)';
                   }}
                 >
                   Delete
@@ -231,7 +278,7 @@ const DatasetUploadPage: React.FC = () => {
 
       {/* Conditionally show upload section */}
       {selectedDatasetId && (
-        <div>
+        <div style={{ marginTop: '16px', paddingBottom: '32px' }}>
           <DataUpload
             title="Mass Spectrometry Data"
             uploadEndpoint={`${API_ENDPOINTS.UPLOAD_RAWDATA}?dataset_id=${selectedDatasetId}`}

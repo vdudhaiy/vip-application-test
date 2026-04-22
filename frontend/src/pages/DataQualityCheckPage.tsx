@@ -5,6 +5,7 @@ import axios from 'axios';
 import DensityPlot from '../components/DensityPlot';
 import ErrorMessage from '../components/ErrorMessage';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { useGraphDownload } from '../utils/graphDownload';
 
 interface DensityPoint {
   x: number;
@@ -32,6 +33,10 @@ const DataQualityCheckPage: React.FC = () => {
   const [plotData, setPlotData] = useState<PlotResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloadingPatient, setDownloadingPatient] = useState(false);
+  const [downloadingCase, setDownloadingCase] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const { downloadPatientGraphs, downloadCaseGraphs } = useGraphDownload();
 
   useEffect(() => {
     setLoading(true);
@@ -52,6 +57,36 @@ const DataQualityCheckPage: React.FC = () => {
         setLoading(false);
       });
   }, []);
+
+  const handleDownloadPatientGraphs = async () => {
+    setDownloadingPatient(true);
+    setDownloadError(null);
+    try {
+      const datasetId = localStorage.getItem('selectedDatasetId');
+      if (!datasetId) throw new Error('Dataset ID not found');
+      await downloadPatientGraphs(datasetId, 'data');
+    } catch (err) {
+      console.error('Error downloading patient graphs:', err);
+      setDownloadError(err instanceof Error ? err.message : 'Failed to download patient graphs');
+    } finally {
+      setDownloadingPatient(false);
+    }
+  };
+
+  const handleDownloadCaseGraphs = async () => {
+    setDownloadingCase(true);
+    setDownloadError(null);
+    try {
+      const datasetId = localStorage.getItem('selectedDatasetId');
+      if (!datasetId) throw new Error('Dataset ID not found');
+      await downloadCaseGraphs(datasetId, 'data');
+    } catch (err) {
+      console.error('Error downloading case graphs:', err);
+      setDownloadError(err instanceof Error ? err.message : 'Failed to download case graphs');
+    } finally {
+      setDownloadingCase(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -129,8 +164,30 @@ const DataQualityCheckPage: React.FC = () => {
         Data Quality Check
       </h2>
 
+      {downloadError && (
+        <ErrorMessage message={downloadError} type="error" />
+      )}
+
       <div>
-        <h3 style={{ color: '#EEEEEE' }}>Distribution by Patient</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+          <h3 style={{ color: '#EEEEEE', margin: 0 }}>Distribution by Patient</h3>
+          <button
+            onClick={handleDownloadPatientGraphs}
+            disabled={downloadingPatient}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: downloadingPatient ? '#555' : '#4CAF50',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: downloadingPatient ? 'not-allowed' : 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold',
+            }}
+          >
+            {downloadingPatient ? 'Downloading...' : '⬇ Download as Image'}
+          </button>
+        </div>
         <div style={{ 
           display: 'grid', 
           gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
@@ -148,7 +205,25 @@ const DataQualityCheckPage: React.FC = () => {
       </div>
 
       <div style={{ marginTop: '40px' }}>
-        <h3 style={{ color: '#EEEEEE' }}>Distribution by Case/Control</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+          <h3 style={{ color: '#EEEEEE', margin: 0 }}>Distribution by Case/Control</h3>
+          <button
+            onClick={handleDownloadCaseGraphs}
+            disabled={downloadingCase}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: downloadingCase ? '#555' : '#4CAF50',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: downloadingCase ? 'not-allowed' : 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold',
+            }}
+          >
+            {downloadingCase ? 'Downloading...' : '⬇ Download as Image'}
+          </button>
+        </div>
         <div style={{ 
           display: 'grid', 
           gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',

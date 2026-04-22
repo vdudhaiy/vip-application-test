@@ -7,6 +7,7 @@ import traceback
 from django.shortcuts import render
 from django.core.files.storage import FileSystemStorage
 from django.conf import settings
+from django.http import HttpResponse, FileResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser
@@ -28,6 +29,7 @@ from .utils.analysis import (
     prepare_pairwise_volcanos,
 )
 from .utils.histogram_processing import density_by_patient, density_by_case
+from .utils.graph_export import create_density_plot_image
 from .models import Dataset, RawDataUpload, GroupDataUpload, FilterData, NormalizedData, TransformedData, ImputeData, TtestResults
 
 # Logger
@@ -851,3 +853,370 @@ class TtestResultsView(APIView):
         except Exception as e:
             logger.error(f"Error in TtestResultsView GET: {str(e)}", exc_info=True)
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# ========== Graph Download Endpoints ==========
+
+def _get_density_data_for_stage(dataset, data_type):
+    """
+    Helper function to get density data for a specific pipeline stage.
+    
+    Args:
+        dataset: Dataset object
+        data_type: One of 'data', 'filter', 'normal', 'transform', 'impute'
+    
+    Returns:
+        dict with density_patient and density_case data
+    """
+    try:
+        if data_type == 'data':
+            # Raw data
+            if not dataset.raw_file or not dataset.group_file:
+                return None
+            spec_data = dataset.raw_file.spec_data
+            group_data = dataset.group_file.grouping
+            density_patient = density_by_patient(pd.DataFrame(spec_data['data']))
+            density_case = density_by_case(pd.DataFrame(spec_data['data']), group_data['grouping'])
+            
+        elif data_type == 'filter':
+            # Filtered data
+            if not dataset.filtered_data or not dataset.filtered_data.filter_data:
+                return None
+            filter_data = dataset.filtered_data.filter_data.get('data')
+            group_data = dataset.filtered_data.grouping.get('grouping')
+            density_patient = density_by_patient(pd.DataFrame(filter_data))
+            density_case = density_by_case(pd.DataFrame(filter_data), group_data)
+            
+        elif data_type == 'normal':
+            # Normalized data
+            if not dataset.normal_data or not dataset.normal_data.normal_data:
+                return None
+            normal_data = dataset.normal_data.normal_data.get('data')
+            group_data = dataset.normal_data.grouping.get('grouping')
+            density_patient = density_by_patient(pd.DataFrame(normal_data))
+            density_case = density_by_case(pd.DataFrame(normal_data), group_data)
+            
+        elif data_type == 'transform':
+            # Transformed data
+            if not dataset.transform_data or not dataset.transform_data.transformed_data:
+                return None
+            transformed_data = dataset.transform_data.transformed_data.get('data')
+            group_data = dataset.transform_data.grouping.get('grouping')
+            density_patient = density_by_patient(pd.DataFrame(transformed_data))
+            density_case = density_by_case(pd.DataFrame(transformed_data), group_data)
+            
+        elif data_type == 'impute':
+            # Imputed data
+            if not dataset.impute_data or not dataset.impute_data.impute_data:
+                return None
+            impute_data = dataset.impute_data.impute_data.get('data')
+            group_data = dataset.impute_data.grouping.get('grouping')
+            density_patient = density_by_patient(pd.DataFrame(impute_data))
+            density_case = density_by_case(pd.DataFrame(impute_data), group_data)
+        
+        else:
+            return None
+        
+        return {
+            'density_patient': density_patient,
+            'density_case': density_case
+        }
+    except Exception as e:
+        logger.error(f"Error getting density data for stage {data_type}: {str(e)}", exc_info=True)
+        return None
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def download_patient_graphs(request):
+    """
+    Download all patient distribution graphs as a single PNG image.
+    
+    Query Parameters:
+    - dataset_id: Required
+    - data_type: One of 'data', 'filter', 'normal', 'transform', 'impute' (default: 'data')
+    """
+    try:
+        user = request.user
+        dataset_id = request.query_params.get('dataset_id')
+        data_type = request.query_params.get('data_type', 'data')
+        
+        if not dataset_id:
+            return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        dataset = get_object_or_404(Dataset, id=dataset_id, user=user)
+        
+        # Get the appropriate density data
+        density_data = _get_density_data_for_stage(dataset, data_type)
+        
+        if not density_data:
+            return Response({"error": f"No data available for stage '{data_type}'"}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        patient_plots = density_data['density_patient'].get('plots', [])
+        
+        if not patient_plots:
+            return Response({"error": "No patient distribution data available"}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Generate image
+        title = f"Distribution by Patient - {data_type.capitalize()}"
+        img_buffer = create_density_plot_image(patient_plots, title)
+        
+        # Return as downloadable PNG
+        response = HttpResponse(img_buffer, content_type='image/png')
+        response['Content-Disposition'] = f'attachment; filename="patient_distribution_{data_type}.png"'
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error downloading patient graphs: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def download_case_graphs(request):
+    """
+    Download all case/control distribution graphs as a single PNG image.
+    
+    Query Parameters:
+    - dataset_id: Required
+    - data_type: One of 'data', 'filter', 'normal', 'transform', 'impute' (default: 'data')
+    """
+    try:
+        user = request.user
+        dataset_id = request.query_params.get('dataset_id')
+        data_type = request.query_params.get('data_type', 'data')
+        
+        if not dataset_id:
+            return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        dataset = get_object_or_404(Dataset, id=dataset_id, user=user)
+        
+        # Get the appropriate density data
+        density_data = _get_density_data_for_stage(dataset, data_type)
+        
+        if not density_data:
+            return Response({"error": f"No data available for stage '{data_type}'"}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        case_plots = density_data['density_case'].get('plots', [])
+        
+        if not case_plots:
+            return Response({"error": "No case/control distribution data available"}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Generate image
+        title = f"Distribution by Case/Control - {data_type.capitalize()}"
+        img_buffer = create_density_plot_image(case_plots, title)
+        
+        # Return as downloadable PNG
+        response = HttpResponse(img_buffer, content_type='image/png')
+        response['Content-Disposition'] = f'attachment; filename="case_distribution_{data_type}.png"'
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error downloading case graphs: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def download_volcano_plot(request):
+    """
+    Download volcano plot as a PNG image.
+    
+    Query Parameters:
+    - dataset_id: Required
+    - reference_group: Optional (for multi-group comparisons)
+    - contrast: Optional (specific contrast to download for multi-group)
+    """
+    try:
+        from .utils.graph_export import create_volcano_plot_image
+        
+        user = request.user
+        dataset_id = request.query_params.get('dataset_id')
+        reference_group = request.query_params.get('reference_group', None)
+        contrast = request.query_params.get('contrast', None)
+        
+        if not dataset_id:
+            return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        dataset = get_object_or_404(Dataset, id=dataset_id, user=user)
+        
+        if not dataset.impute_data:
+            return Response({"error": "Imputed data does not exist. Complete the preprocessing pipeline first."}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        if not dataset.impute_data.impute_data or not dataset.impute_data.grouping:
+            return Response({"error": "Imputed data or grouping information is missing."}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        imputed_data = dataset.impute_data.impute_data.get('data')
+        case_control = dataset.impute_data.grouping.get('grouping')
+        
+        if not imputed_data or not case_control:
+            return Response({"error": "Imputed data or grouping is empty."}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        df = pd.DataFrame(imputed_data)
+        protein_gene_col = df.iloc[:, 0]
+        protein_gene_df = pd.DataFrame({'Protein': protein_gene_col})
+        
+        numeric_df = df.select_dtypes(include=[np.number])
+        numeric_df.insert(0, 'Protein', protein_gene_col)
+        df = numeric_df
+        
+        result_df = final_data_analysis(df, case_control, protein_gene_df, reference_group=reference_group)
+        
+        # Extract groups
+        groups = list(dict.fromkeys(case_control))
+        
+        volcano_data = []
+        thresholds = {}
+        contrast_label = ""
+        
+        # Prepare volcano data based on number of groups
+        if len(groups) > 2 and reference_group:
+            # Multiple groups with reference group specified - use pairwise volcanos
+            volcano_payloads = prepare_pairwise_volcanos(df, case_control, protein_gene_df, reference_group=reference_group)
+            
+            if contrast and contrast in volcano_payloads:
+                payload = volcano_payloads[contrast]
+                volcano_data_df = payload.get("volcano_data")
+                if volcano_data_df is not None:
+                    volcano_data = json.loads(volcano_data_df.to_json(orient='records'))
+                thresholds = payload.get("thresholds", {})
+                contrast_label = contrast
+            elif len(volcano_payloads) > 0:
+                # Use first contrast if not specified
+                first_contrast = list(volcano_payloads.keys())[0]
+                payload = volcano_payloads[first_contrast]
+                volcano_data_df = payload.get("volcano_data")
+                if volcano_data_df is not None:
+                    volcano_data = json.loads(volcano_data_df.to_json(orient='records'))
+                thresholds = payload.get("thresholds", {})
+                contrast_label = first_contrast
+        else:
+            # Two groups or no reference specified - use standard single volcano
+            volcano = prepare_volcano(result_df)
+            volcano_data_df = volcano.get("volcano_data")
+            if volcano_data_df is not None:
+                volcano_data = json.loads(volcano_data_df.to_json(orient='records'))
+            thresholds = volcano.get("thresholds", {})
+        
+        if not volcano_data:
+            return Response({"error": "No volcano plot data available"}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Generate image
+        img_buffer = create_volcano_plot_image(volcano_data, thresholds, 
+                                              title="Volcano Plot", contrast_label=contrast_label)
+        
+        # Return as downloadable PNG
+        filename = f"volcano_plot_{reference_group or 'combined'}.png" if not contrast else f"volcano_plot_{contrast}.png"
+        response = HttpResponse(img_buffer, content_type='image/png')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error downloading volcano plot: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def download_heatmap(request):
+    """
+    Download clustered heatmap as a PNG image with dendrograms and vlag colormap.
+    
+    Query Parameters:
+    - dataset_id: Required
+    - top_n: Number of top proteins to include (default: 20)
+    - aggregate_to_protein_level: Whether to aggregate to protein level (default: true)
+    - aggregation_method: Method for aggregation - 'mean' or 'median' (default: mean)
+    """
+    try:
+        from .utils.graph_export import create_clustered_heatmap_image
+        
+        user = request.user
+        dataset_id = request.query_params.get('dataset_id')
+        top_n = int(request.query_params.get('top_n', 20))
+        aggregate_to_protein_level = request.query_params.get('aggregate_to_protein_level', 'true').lower() == 'true'
+        aggregation_method = request.query_params.get('aggregation_method', 'mean')
+        
+        if not dataset_id:
+            return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        dataset = get_object_or_404(Dataset, id=dataset_id, user=user)
+        
+        if not dataset.impute_data:
+            return Response({"error": "Imputed data does not exist. Complete the preprocessing pipeline first."}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        if not dataset.impute_data.impute_data or not dataset.impute_data.grouping:
+            return Response({"error": "Imputed data or grouping information is missing."}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        imputed_data = dataset.impute_data.impute_data.get('data')
+        case_control = dataset.impute_data.grouping.get('grouping')
+        
+        if not imputed_data or not case_control:
+            return Response({"error": "Imputed data or grouping is empty."}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        df = pd.DataFrame(imputed_data)
+        protein_gene_col = df.iloc[:, 0]
+        protein_gene_df = pd.DataFrame({'Protein': protein_gene_col})
+        
+        numeric_df = df.select_dtypes(include=[np.number])
+        numeric_df.insert(0, 'Protein', protein_gene_col)
+        df = numeric_df
+        
+        result_df = final_data_analysis(df, case_control, protein_gene_df)
+        
+        # Select top proteins
+        top_proteins = select_top_proteins(result_df, n=top_n, by='p_value')
+        
+        heatmap = prepare_heatmap(
+            df,
+            top_proteins,
+            case_control,
+            aggregate_to_protein_level=aggregate_to_protein_level,
+            aggregation_method=aggregation_method
+        )
+        
+        heatmap_matrix = heatmap.get("matrix")
+        if heatmap_matrix is None or len(heatmap_matrix) == 0:
+            return Response({"error": "No heatmap data available"}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get labels and group labels
+        row_labels = heatmap_matrix.index.tolist()
+        col_labels = heatmap_matrix.columns.tolist()
+        col_group_labels = heatmap.get("col_group_labels", [])
+        
+        # Get linkage matrices for dendrograms
+        row_linkage = heatmap.get("row_linkage")
+        col_linkage = heatmap.get("col_linkage")
+        
+        # Generate image with dendrograms and vlag colormap
+        title = f"Clustered Heatmap - Top {top_n} Proteins"
+        img_buffer = create_clustered_heatmap_image(
+            heatmap_matrix.values,
+            row_labels=row_labels,
+            column_labels=col_labels,
+            col_group_labels=col_group_labels,
+            row_linkage=row_linkage,
+            col_linkage=col_linkage,
+            title=title,
+            figsize=(16, 12)
+        )
+        
+        # Return as downloadable PNG
+        response = HttpResponse(img_buffer, content_type='image/png')
+        response['Content-Disposition'] = f'attachment; filename="heatmap_top{top_n}.png"'
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error downloading heatmap: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

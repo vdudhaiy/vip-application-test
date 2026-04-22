@@ -7,6 +7,7 @@ import StatHeatMap from "../components/StatHeatMap";
 import ErrorMessage from "../components/ErrorMessage";
 import LoadingSpinner from "../components/LoadingSpinner";
 import API_ENDPOINTS from "../config/api";
+import { downloadVolcanoPlot, downloadHeatmap } from "../utils/graphDownload";
 
 interface DataRow {
   id: number;
@@ -52,6 +53,10 @@ const StatAnalysisPage: React.FC = () => {
   const [aggregateToProteinLevel, setAggregateToProteinLevel] = useState<boolean>(true);
   const [aggregationMethod, setAggregationMethod] = useState<string>("mean");
   const [isLoadingHeatmap, setIsLoadingHeatmap] = useState<boolean>(false);
+  const [isDownloadingVolcano, setIsDownloadingVolcano] = useState<boolean>(false);
+  const [downloadVolcanoError, setDownloadVolcanoError] = useState<string | null>(null);
+  const [isDownloadingHeatmap, setIsDownloadingHeatmap] = useState<boolean>(false);
+  const [downloadHeatmapError, setDownloadHeatmapError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchAnalysisData = async () => {
@@ -249,6 +254,40 @@ const StatAnalysisPage: React.FC = () => {
     }
   };
 
+  const handleDownloadVolcanoPlot = async () => {
+    setIsDownloadingVolcano(true);
+    setDownloadVolcanoError(null);
+    try {
+      const datasetId = localStorage.getItem("selectedDatasetId");
+      if (!datasetId) {
+        throw new Error("Dataset ID not found");
+      }
+      await downloadVolcanoPlot(datasetId);
+    } catch (err: any) {
+      console.error("Error downloading volcano plot:", err);
+      setDownloadVolcanoError(err.message || "Failed to download volcano plot");
+    } finally {
+      setIsDownloadingVolcano(false);
+    }
+  };
+
+  const handleDownloadHeatmap = async () => {
+    setIsDownloadingHeatmap(true);
+    setDownloadHeatmapError(null);
+    try {
+      const datasetId = localStorage.getItem("selectedDatasetId");
+      if (!datasetId) {
+        throw new Error("Dataset ID not found");
+      }
+      await downloadHeatmap(datasetId, topN, aggregateToProteinLevel, aggregationMethod);
+    } catch (err: any) {
+      console.error("Error downloading heatmap:", err);
+      setDownloadHeatmapError(err.message || "Failed to download heatmap");
+    } finally {
+      setIsDownloadingHeatmap(false);
+    }
+  };
+
   if (error) {
     return (
       <StatAnalysisPageTemplate title="Statistical Analysis">
@@ -341,7 +380,29 @@ const StatAnalysisPage: React.FC = () => {
             minHeight: 0,
           }}
         >
-          <h3 style={{ margin: "0 0 10px 0" }}>Volcano Plot</h3>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+            <h3 style={{ margin: 0 }}>Volcano Plot</h3>
+            <button
+              onClick={handleDownloadVolcanoPlot}
+              disabled={isDownloadingVolcano}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: isDownloadingVolcano ? "#555" : "#4CAF50",
+                color: "#fff",
+                border: "1px solid #45a049",
+                borderRadius: "4px",
+                cursor: isDownloadingVolcano ? "default" : "pointer",
+                fontSize: "12px",
+                fontWeight: "bold",
+                opacity: isDownloadingVolcano ? 0.6 : 1,
+              }}
+            >
+              {isDownloadingVolcano ? "⬇ Downloading..." : "⬇ Download as Image"}
+            </button>
+          </div>
+          {downloadVolcanoError && (
+            <ErrorMessage message={downloadVolcanoError} type="error" />
+          )}
           <div 
             style={{ 
               flex: 1,
@@ -367,7 +428,30 @@ const StatAnalysisPage: React.FC = () => {
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "10px 10px 0 10px", gap: "15px" }}>
-            <h3 style={{ margin: 0 }}>Heat Map</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <h3 style={{ margin: 0 }}>Heat Map</h3>
+              <button
+                onClick={handleDownloadHeatmap}
+                disabled={isDownloadingHeatmap}
+                style={{
+                  padding: "6px 12px",
+                  backgroundColor: isDownloadingHeatmap ? "#555" : "#4CAF50",
+                  color: "#fff",
+                  border: "1px solid #45a049",
+                  borderRadius: "4px",
+                  cursor: isDownloadingHeatmap ? "default" : "pointer",
+                  fontSize: "11px",
+                  fontWeight: "bold",
+                  opacity: isDownloadingHeatmap ? 0.6 : 1,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {isDownloadingHeatmap ? "⬇ Downloading..." : "⬇ Download as Image"}
+              </button>
+            </div>
+            {downloadHeatmapError && (
+              <ErrorMessage message={downloadHeatmapError} type="error" />
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
               <label style={{ fontSize: "12px", color: "#aaa", whiteSpace: "nowrap" }}>
                 Top N Proteins:

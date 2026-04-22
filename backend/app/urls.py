@@ -26,6 +26,10 @@ urlpatterns = [
     path('api/heatmap-data', get_heatmap_data, name='heatmap-data'),
     path('api/run-ttest', run_ttest_analysis, name='run-ttest'),
     path('api/ttest-results', TtestResultsView.as_view(), name='ttest-results'),
+    path('api/download/patient-graphs', download_patient_graphs, name='download-patient-graphs'),
+    path('api/download/case-graphs', download_case_graphs, name='download-case-graphs'),
+    path('api/download/volcano-plot', download_volcano_plot, name='download-volcano-plot'),
+    path('api/download/heatmap', download_heatmap, name='download-heatmap'),
 ]
 
 if settings.DEBUG:

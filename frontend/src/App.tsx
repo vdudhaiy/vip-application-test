@@ -60,15 +60,30 @@ const App: React.FC = () => {
   if (loading) {
     return (
       <div style={{
-        backgroundColor: "#1e1e1e",
-        color: "#E0E0E0",
+        backgroundColor: "#0d1117",
+        color: "#e6edf3",
         minHeight: "100vh",
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-        fontSize: "16px"
+        fontSize: "16px",
+        flexDirection: "column",
+        gap: "16px"
       }}>
-        Loading...
+        <div style={{
+          width: "40px",
+          height: "40px",
+          border: "3px solid rgba(88, 166, 255, 0.2)",
+          borderTop: "3px solid #58a6ff",
+          borderRadius: "50%",
+          animation: "spin 1s linear infinite"
+        }} />
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+        <span>Initializing...</span>
       </div>
     );
   }
@@ -84,10 +99,8 @@ const App: React.FC = () => {
       margin: 0,
       padding: 0,
       overflow: "hidden",
-      backgroundColor: "#1e1e1e",
-      
-      fontSize: "11px", 
-
+      backgroundColor: "#0d1117",
+      fontSize: "14px"
     }}>
       <div style={{ 
         display: "flex",
@@ -100,16 +113,17 @@ const App: React.FC = () => {
         <div style={{ 
           display: "flex",
           flex: 1,
-          backgroundColor: "#1e1e1e",
+          backgroundColor: "#0d1117",
           overflow: "hidden"
         }}>
           {isInDashboard && (
             <div style={{ 
-              width: "100px",
-              backgroundColor: "#1e1e1e",
+              width: "120px",
+              backgroundColor: "#161b22",
               flexShrink: 0,
               margin: 0,
-              padding: 0
+              padding: 0,
+              borderRight: "1px solid #30363d"
             }}>
               <Sidebar onSelectSection={setActiveSection} activeSection={activeSection} />
             </div>
@@ -117,12 +131,11 @@ const App: React.FC = () => {
           
           <div style={{ 
             flex: 1,
-            backgroundColor: "#1e1e1e",
+            backgroundColor: "#0d1117",
             overflow: "auto",
-            padding: "20px",
+            padding: "24px",
             display: "flex",
             flexDirection: "column"
-            
           }}>
             <Suspense fallback={
               <div style={{
@@ -130,9 +143,20 @@ const App: React.FC = () => {
                 justifyContent: "center",
                 alignItems: "center",
                 height: "200px",
-                color: "#E0E0E0"
+                color: "#e6edf3",
+                flexDirection: "column",
+                gap: "16px"
               }}>
-                Loading page...
+                <div style={{
+                  width: "30px",
+                  height: "30px",
+                  border: "2px solid rgba(88, 166, 255, 0.2)",
+                  borderTop: "2px solid #58a6ff",
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite"
+                }} />
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                <span>Loading page...</span>
               </div>
             }>
               <Routes>
@@ -150,7 +174,7 @@ const App: React.FC = () => {
                 <Route path="/StatisticalAnalysis" element={<StatisticalAnalysisPage />} />
                 <Route path="/" element={<HomePage />} />
                 <Route path="/feedback" element={<FeedbackPage />} />
-                <Route path="*" element={<h2 style={{ color: "#E0E0E0" }}>Page Not Found</h2>} />
+                <Route path="*" element={<h2 style={{ color: "#e6edf3" }}>Page Not Found</h2>} />
               </Routes>
             </Suspense>
             

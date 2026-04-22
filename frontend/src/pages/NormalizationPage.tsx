@@ -6,6 +6,7 @@ import ErrorMessage from "../components/ErrorMessage";
 import LoadingSpinner from "../components/LoadingSpinner";
 import axios from "axios";
 import API_ENDPOINTS from "../config/api";
+import { useGraphDownload } from "../utils/graphDownload";
 
 interface PlotResponse {
   density_patient: {
@@ -41,10 +42,44 @@ const NormalizationPage: React.FC = () => {
   const [statisticOption, setStatisticOption] = React.useState<string>("mean");
   const [normalizing, setNormalizing] = React.useState(false);
   const [normalizationApplied, setNormalizationApplied] = React.useState(false);
+  const [downloadingPatient, setDownloadingPatient] = React.useState(false);
+  const [downloadingCase, setDownloadingCase] = React.useState(false);
+  const [downloadError, setDownloadError] = React.useState<string | null>(null);
+  const { downloadPatientGraphs, downloadCaseGraphs } = useGraphDownload();
 
   // Used prop for template
   const handleUpdate = (newData: PlotResponse) => {
     setPlotData(newData);
+  };
+
+  const handleDownloadPatientGraphs = async () => {
+    setDownloadingPatient(true);
+    setDownloadError(null);
+    try {
+      const datasetId = localStorage.getItem('selectedDatasetId');
+      if (!datasetId) throw new Error('Dataset ID not found');
+      await downloadPatientGraphs(datasetId, 'normal');
+    } catch (err) {
+      console.error('Error downloading patient graphs:', err);
+      setDownloadError(err instanceof Error ? err.message : 'Failed to download patient graphs');
+    } finally {
+      setDownloadingPatient(false);
+    }
+  };
+
+  const handleDownloadCaseGraphs = async () => {
+    setDownloadingCase(true);
+    setDownloadError(null);
+    try {
+      const datasetId = localStorage.getItem('selectedDatasetId');
+      if (!datasetId) throw new Error('Dataset ID not found');
+      await downloadCaseGraphs(datasetId, 'normal');
+    } catch (err) {
+      console.error('Error downloading case graphs:', err);
+      setDownloadError(err instanceof Error ? err.message : 'Failed to download case graphs');
+    } finally {
+      setDownloadingCase(false);
+    }
   };
 
   /* ---------------------- Fetch available entries ---------------------- */
@@ -472,9 +507,30 @@ const NormalizationPage: React.FC = () => {
         {/* ------------------ Plots ------------------ */}
         {normalizationApplied && plotData && !error && (
           <>
-            <h3 style={{ color: "#EEEEEE" }}>
-              Normalized Distribution by Patient
-            </h3>
+            {downloadError && (
+              <ErrorMessage message={downloadError} type="error" />
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <h3 style={{ color: "#EEEEEE", margin: 0 }}>
+                Normalized Distribution by Patient
+              </h3>
+              <button
+                onClick={handleDownloadPatientGraphs}
+                disabled={downloadingPatient}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: downloadingPatient ? '#555' : '#4CAF50',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: downloadingPatient ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                }}
+              >
+                {downloadingPatient ? 'Downloading...' : '⬇ Download as Image'}
+              </button>
+            </div>
             <div
               style={{
                 display: "grid",
@@ -492,9 +548,27 @@ const NormalizationPage: React.FC = () => {
               ))}
             </div>
 
-            <h3 style={{ color: "#EEEEEE", marginTop: "40px" }}>
-              Normalized Distribution by Case/Control
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '40px', marginBottom: '15px' }}>
+              <h3 style={{ color: "#EEEEEE", margin: 0 }}>
+                Normalized Distribution by Case/Control
+              </h3>
+              <button
+                onClick={handleDownloadCaseGraphs}
+                disabled={downloadingCase}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: downloadingCase ? '#555' : '#4CAF50',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: downloadingCase ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                }}
+              >
+                {downloadingCase ? 'Downloading...' : '⬇ Download as Image'}
+              </button>
+            </div>
             <div
               style={{
                 display: "grid",

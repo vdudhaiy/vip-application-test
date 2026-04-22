@@ -26,6 +26,10 @@ export const API_ENDPOINTS = {
   TTEST_RESULTS: `${API_BASE_URL}/api/ttest-results`,
   CHANGE_PASSWORD: `${API_BASE_URL}/api/change-password`,
   UPDATE_PROFILE: `${API_BASE_URL}/api/update-profile`,
+  DOWNLOAD_PATIENT_GRAPHS: `${API_BASE_URL}/api/download/patient-graphs`,
+  DOWNLOAD_CASE_GRAPHS: `${API_BASE_URL}/api/download/case-graphs`,
+  DOWNLOAD_VOLCANO_PLOT: `${API_BASE_URL}/api/download/volcano-plot`,
+  DOWNLOAD_HEATMAP: `${API_BASE_URL}/api/download/heatmap`,
 };
 
 export default API_ENDPOINTS;

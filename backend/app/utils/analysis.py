@@ -606,6 +606,8 @@ def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bo
 
     # Cluster columns within each group to maintain group contiguity
     grouped_col_order = []
+    col_linkage_matrix = None  # Store linkage matrix for dendrograms
+    
     for grp in groups_ordered:
         grp_cols = [c for c in matrix.columns if group_lookup.get(c) == grp]
         
@@ -626,6 +628,8 @@ def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bo
                 col_link = linkage(col_dist, method="average")
                 ordered_idx = leaves_list(col_link)
                 grp_cols = [grp_cols[i] for i in ordered_idx]
+                # Save the last (or overall) linkage matrix
+                col_linkage_matrix = col_link
             except Exception as e:
                 logger.warning("Column clustering failed for group '%s': %s. Using original order.", grp, e)
         
@@ -637,6 +641,7 @@ def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bo
     # IMPORTANT: Keep integer position order, don't convert to labels yet
     # (because we have duplicate protein IDs in the index, .loc[] with duplicates will return multiple matching rows)
     row_order_positions = list(range(matrix.shape[0]))  # Integer positions: [0, 1, 2, ..., n-1]
+    row_linkage_matrix = None  # Store linkage matrix for dendrograms
     
     if matrix.shape[0] > 1:
         try:
@@ -649,12 +654,12 @@ def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bo
                 if not np.isfinite(distances).all():
                     logger.warning("Could not cluster rows; using original protein order.")
                 else:
-                    linkage_matrix = linkage(distances, method="average")
-                    order = leaves_list(linkage_matrix)
+                    row_linkage_matrix = linkage(distances, method="average")
+                    order = leaves_list(row_linkage_matrix)
                     row_order_positions = order.tolist() if hasattr(order, 'tolist') else list(order)
             else:
-                linkage_matrix = linkage(distances, method="average")
-                order = leaves_list(linkage_matrix)
+                row_linkage_matrix = linkage(distances, method="average")
+                order = leaves_list(row_linkage_matrix)
                 row_order_positions = order.tolist() if hasattr(order, 'tolist') else list(order)
         except Exception as e:
             logger.warning("Row clustering failed: %s. Using original protein order.", e)
@@ -685,7 +690,9 @@ def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bo
             "min": float(matrix_min),
             "max": float(matrix_max),
             "symmetric_range": float(value_range)
-        }
+        },
+        "row_linkage": row_linkage_matrix,
+        "col_linkage": col_linkage_matrix
     }
 
     logger.info(f"[HEATMAP] Final matrix: {matrix.shape[0]} rows × {matrix.shape[1]} columns")
