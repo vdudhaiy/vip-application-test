@@ -11,7 +11,8 @@ type AuthContextType = {
   user: User | null;
   loading: boolean;
   login: (username: string, password: string) => Promise<boolean>;
-  signup: (username: string, email: string, password: string) => Promise<boolean>;
+  /** Returns null on success, or an error message string on failure. */
+  signup: (username: string, email: string, password: string) => Promise<string | null>;
   logout: () => Promise<void>;
 };
 
@@ -60,32 +61,37 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     return false;
   };
 
-  const signup = async (username: string, email: string, password: string): Promise<boolean> => {
+  const signup = async (username: string, email: string, password: string): Promise<string | null> => {
     try {
       const res = await fetch(API_ENDPOINTS.SIGNUP, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, email, password }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        const token = data.token;
-        localStorage.setItem('token', token);
-        const userData = data.user;
-        setUser(userData);
-        return true;
-      } else {
-        const errorData = await res.json();
-        console.error('Signup failed:', errorData);
+        localStorage.setItem('token', data.token);
+        setUser(data.user);
+        return null;
       }
+
+      const errorData = await res.json();
+      if (errorData.username) {
+        return Array.isArray(errorData.username)
+          ? errorData.username[0]
+          : errorData.username;
+      }
+      if (errorData.email) {
+        return Array.isArray(errorData.email)
+          ? errorData.email[0]
+          : errorData.email;
+      }
+      return 'Signup failed. Please try again.';
     } catch (err) {
       console.error('Signup error:', err);
+      return 'Could not reach the server. Please try again.';
     }
-
-    return false;
   };
 
   const logout = async () => {

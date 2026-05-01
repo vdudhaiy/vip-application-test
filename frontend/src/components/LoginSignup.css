@@ -1,76 +1,91 @@
+/* ─── Auth page wrapper ───────────────────────────────────────────────────── */
 .auth-container {
   display: flex;
-  height: 100vh;
   justify-content: center;
-  align-items: center;
-  background-color: #1E1E1E;
+  align-items: flex-start;
+  width: 100%;
+  padding: 60px 24px 40px;
 }
 
+/* ─── Auth card ──────────────────────────────────────────────────────────── */
 .auth-form {
-  background-color: #3A3A3A; /* lighter pane */
-  padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
+  position: relative;
+  background: linear-gradient(145deg, #1c2129 0%, var(--bg-secondary) 100%);
+  border: 1px solid rgba(48, 54, 61, 0.9);
+  border-radius: var(--radius-lg);
+  padding: 48px 40px;
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   display: flex;
   flex-direction: column;
+  gap: 14px;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.65),
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  animation: fadeIn 0.3s ease-out;
 }
 
+/* Shimmer line at top of card */
+.auth-form::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20%; right: 20%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(88, 166, 255, 0.5), transparent);
+  border-radius: 1px;
+}
+
+/* ─── Heading ────────────────────────────────────────────────────────────── */
 .auth-form h2 {
-  margin-bottom: 1.5rem;
   text-align: center;
-  color: #FFFFFF;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
 }
 
+/* ─── Inputs inside auth form ────────────────────────────────────────────── */
 .auth-form input {
-  padding: 0.75rem;
-  margin-bottom: 1rem;
-  border: 1px solid #999;
-  border-radius: 4px;
-  background-color: #F0F0F0; /* off-white input */
-  color: #000000;
-  font-size: 1rem;
+  width: 100%;
 }
 
-.auth-form input::placeholder {
-  color: #666666;
-}
-
-.auth-error {
-  color: #ff6b6b;
-  text-align: center;
-  margin-bottom: 1rem;
-}
-
-.auth-link-text {
-  margin-top: 1rem;
-  font-size: 0.9rem;
-  text-align: center;
-  color: #FFFFFF; /* white text */
-}
-
-.auth-link-text a {
-  color: #61dafb; /* distinct link color */
-  font-weight: bold;
-  text-decoration: underline;
-}
-
+/* ─── Submit button ──────────────────────────────────────────────────────── */
 .auth-form button {
-  background-color: #1abc9c; /* teal button */
-  color: #FFFFFF;
-  border: none;
-  padding: 14px 30px; /* taller, narrower */
-  border-radius: 6px;
-  font-size: 1rem;
-  font-weight: bold;
-  align-self: center;
-  transition: background-color 0.3s ease;
-  margin-top: 0.5rem;
-  width: fit-content;
-  min-width: 140px;
+  width: 100%;
+  padding: 11px 18px;
+  font-size: 14px;
+  margin-top: 4px;
 }
 
-.auth-form button:hover {
-  background-color: #16a085;
+/* ─── Error message ──────────────────────────────────────────────────────── */
+.auth-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-danger);
+  font-size: 13px;
+  padding: 10px 14px;
+  background-color: rgba(248, 81, 73, 0.08);
+  border: 1px solid rgba(248, 81, 73, 0.25);
+  border-radius: var(--radius-sm);
+}
+
+/* ─── Link text ──────────────────────────────────────────────────────────── */
+.auth-link-text {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+.auth-link-text a {
+  color: var(--accent-primary);
+  font-weight: 500;
+}
+.auth-link-text a:hover {
+  color: var(--accent-secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }

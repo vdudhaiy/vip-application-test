@@ -22,6 +22,7 @@ export const API_ENDPOINTS = {
   ANALYSIS: `${API_BASE_URL}/api/analysis`,
   VOLCANO_PLOT_DATA: `${API_BASE_URL}/api/volcano-plot-data`,
   HEATMAP_DATA: `${API_BASE_URL}/api/heatmap-data`,
+  CACHED_ANALYSIS_DATA: `${API_BASE_URL}/api/cached-analysis-data`,
   RUN_TTEST: `${API_BASE_URL}/api/run-ttest`,
   TTEST_RESULTS: `${API_BASE_URL}/api/ttest-results`,
   CHANGE_PASSWORD: `${API_BASE_URL}/api/change-password`,

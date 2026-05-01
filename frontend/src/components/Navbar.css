@@ -1,0 +1,115 @@
+/* ─── Frosted-glass top bar ──────────────────────────────────────────────── */
+.navbar {
+  position: relative;
+  z-index: 100;
+  flex-shrink: 0;
+  height: 56px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  background: rgba(13, 17, 23, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(48, 54, 61, 0.7);
+  box-shadow: 0 1px 0 rgba(88, 166, 255, 0.06), 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* Subtle shimmer line at bottom of navbar */
+.navbar::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(88, 166, 255, 0.18) 40%,
+    rgba(88, 166, 255, 0.18) 60%,
+    transparent 100%
+  );
+}
+
+/* ─── Brand ──────────────────────────────────────────────────────────────── */
+.navbar-brand {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  margin-right: 36px;
+  cursor: pointer;
+  user-select: none;
+  background: linear-gradient(135deg, var(--accent-secondary) 0%, var(--accent-primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  transition: opacity 0.2s ease;
+}
+.navbar-brand:hover { opacity: 0.8; }
+
+/* ─── Nav links ──────────────────────────────────────────────────────────── */
+.navbar-links {
+  list-style: none;
+  padding: 0; margin: 0;
+  display: flex;
+  gap: 2px;
+}
+
+.nav-link {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.nav-link:hover {
+  color: var(--text-primary);
+  background-color: rgba(88, 166, 255, 0.07);
+}
+.nav-link--active {
+  color: var(--accent-secondary);
+  background-color: rgba(88, 166, 255, 0.1);
+  border-bottom-color: var(--accent-primary);
+}
+.nav-link--active:hover {
+  color: var(--accent-secondary);
+  background-color: rgba(88, 166, 255, 0.14);
+}
+
+/* ─── Actions ────────────────────────────────────────────────────────────── */
+.navbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* User avatar bubble */
+.navbar-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-tertiary) 0%, var(--accent-primary) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: #ffffff;
+  cursor: pointer;
+  user-select: none;
+  border: 2px solid rgba(88, 166, 255, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.navbar-avatar:hover {
+  transform: scale(1.07);
+  box-shadow: 0 0 16px rgba(88, 166, 255, 0.4);
+  border-color: var(--accent-primary);
+}
+
+/* Login button keeps its global gradient + uses smaller padding in nav */
+.navbar-actions button {
+  padding: 7px 16px;
+  font-size: 13px;
+}

@@ -19,6 +19,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { AuthProvider } from "./components/UserAuth";
+import "./index.css";
 
 // Load runtime config from /config.json before mounting the app.
 // This allows changing API endpoints without rebuilding the static bundle.

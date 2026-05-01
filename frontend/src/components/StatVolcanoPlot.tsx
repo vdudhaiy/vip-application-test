@@ -24,6 +24,9 @@ interface StatVolcanoPlotProps {
   groups?: string[];
   datasetId?: string;
   referenceGroup?: string | null;
+  onReferenceGroupChange?: (group: string | null) => void;
+  onContrastChange?: (contrast: string) => void;
+  onThresholdChange?: (fcThreshold: number, pThreshold: number) => void;
 }
 
 interface PairwiseVolcanoData {
@@ -38,7 +41,7 @@ interface PairwiseVolcanoData {
  * Uses Recharts to render an interactive volcano plot in dark mode.
  * Handles both single and pairwise volcano plots based on number of groups.
  */
-const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data, groups = [], datasetId = "", referenceGroup = null }) => {
+const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data, groups = [], datasetId = "", referenceGroup = null, onReferenceGroupChange, onContrastChange, onThresholdChange }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentData, setCurrentData] = useState<VolcanoPoint[]>(data);
   
@@ -139,6 +142,7 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data, groups = [], da
           const volcanoDataPoints = pairwiseData[firstContrast].volcano_data;
           console.log('[volcano] Volcano data points for first contrast:', volcanoDataPoints);
           setCurrentContrast(firstContrast);
+          onContrastChange?.(firstContrast);
           setCurrentData(volcanoDataPoints || []);
         }
       } else {
@@ -155,6 +159,7 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data, groups = [], da
   const handleApplyReferenceGroup = () => {
     if (selectedReferenceGroup) {
       setAppliedReferenceGroup(selectedReferenceGroup);
+      onReferenceGroupChange?.(selectedReferenceGroup);
     }
   };
 
@@ -348,6 +353,7 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data, groups = [], da
                   const contrast = e.target.value;
                   console.log('[volcano] Switching to contrast:', contrast);
                   setCurrentContrast(contrast);
+                  onContrastChange?.(contrast);
                   const contrastData = pairwiseVolcanos[contrast];
                   if (contrastData && contrastData.volcano_data) {
                     console.log('[volcano] Setting currentData for', contrast, ':', contrastData.volcano_data.length, 'points');
@@ -564,7 +570,11 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data, groups = [], da
             type="number"
             step="0.1"
             value={fcThreshold}
-            onChange={(e) => setFcThreshold(Number(e.target.value))}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              setFcThreshold(v);
+              onThresholdChange?.(v, pThreshold);
+            }}
             style={{
               width: "60px",
               backgroundColor: "#333",
@@ -583,7 +593,11 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data, groups = [], da
             type="number"
             step="0.1"
             value={pThreshold}
-            onChange={(e) => setPThreshold(Number(e.target.value))}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              setPThreshold(v);
+              onThresholdChange?.(fcThreshold, v);
+            }}
             style={{
               width: "60px",
               backgroundColor: "#333",
@@ -822,7 +836,11 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data, groups = [], da
                   type="number"
                   step="0.1"
                   value={fcThreshold}
-                  onChange={(e) => setFcThreshold(Number(e.target.value))}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setFcThreshold(v);
+                    onThresholdChange?.(v, pThreshold);
+                  }}
                   style={{
                     width: "60px",
                     backgroundColor: "#333",
@@ -841,7 +859,11 @@ const StatVolcanoPlot: React.FC<StatVolcanoPlotProps> = ({ data, groups = [], da
                   type="number"
                   step="0.1"
                   value={pThreshold}
-                  onChange={(e) => setPThreshold(Number(e.target.value))}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setPThreshold(v);
+                    onThresholdChange?.(fcThreshold, v);
+                  }}
                   style={{
                     width: "60px",
                     backgroundColor: "#333",

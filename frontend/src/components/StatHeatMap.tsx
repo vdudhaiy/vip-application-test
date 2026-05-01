@@ -15,6 +15,7 @@ interface HeatmapPayload {
 
 interface StatHeatMapProps {
   payload: HeatmapPayload;
+  groupOrder?: string[];
 }
 
 /**
@@ -71,7 +72,7 @@ const getVlagColor = (normalizedValue: number): string => {
  * - Interactive tooltips
  * - Expandable fullscreen modal
  */
-const StatHeatMap: React.FC<StatHeatMapProps> = ({ payload }) => {
+const StatHeatMap: React.FC<StatHeatMapProps> = ({ payload, groupOrder = [] }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tooltip, setTooltip] = useState<{
     visible: boolean;
@@ -100,11 +101,50 @@ const StatHeatMap: React.FC<StatHeatMapProps> = ({ payload }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
+  const baseGroups = useMemo(() => {
+    return [...new Set(payload.colGroupLabels)];
+  }, [payload.colGroupLabels]);
+
+  const orderedGroups = useMemo(() => {
+    const uniqueGroups = baseGroups;
+    if (groupOrder.length === 0) {
+      return uniqueGroups;
+    }
+
+    const filtered = groupOrder.filter((group) => uniqueGroups.includes(group));
+    const missing = uniqueGroups.filter((group) => !filtered.includes(group));
+    return [...filtered, ...missing];
+  }, [baseGroups, groupOrder]);
+
+  const orderedColumns = useMemo(() => {
+    const groupedColumns: Record<string, string[]> = {};
+    payload.columnLabels.forEach((col, idx) => {
+      const group = payload.colGroupLabels[idx] ?? "";
+      if (!groupedColumns[group]) {
+        groupedColumns[group] = [];
+      }
+      groupedColumns[group].push(col);
+    });
+
+    const orderedColumnLabels: string[] = [];
+    const orderedColGroupLabels: string[] = [];
+
+    orderedGroups.forEach((group) => {
+      const cols = groupedColumns[group] || [];
+      cols.forEach((col) => {
+        orderedColumnLabels.push(col);
+        orderedColGroupLabels.push(group);
+      });
+    });
+
+    return { orderedColumnLabels, orderedColGroupLabels };
+  }, [payload.columnLabels, payload.colGroupLabels, orderedGroups]);
+
   // Calculate color limits based on 99.5th percentile for symmetric scaling
   const colorLimits = useMemo(() => {
     const values: number[] = [];
     payload.data.forEach((row) => {
-      payload.columnLabels.forEach((col) => {
+      orderedColumns.orderedColumnLabels.forEach((col) => {
         const val = typeof row[col] === "number" ? row[col] : Number(row[col]);
         if (!isNaN(val)) {
           values.push(Math.abs(val));
@@ -122,17 +162,16 @@ const StatHeatMap: React.FC<StatHeatMapProps> = ({ payload }) => {
     const maxAbs = Math.max(values[idx], 1e-6);
 
     return { min: -maxAbs, max: maxAbs };
-  }, [payload]);
+  }, [payload.data, orderedColumns.orderedColumnLabels]);
 
   // Group information: create unique groups with assigned colors
   const groupInfo = useMemo(() => {
-    const groups = [...new Set(payload.colGroupLabels)];
     const groupColorMap: { [key: string]: string } = {};
-    groups.forEach((group, idx) => {
+    baseGroups.forEach((group, idx) => {
       groupColorMap[group] = SET2_PALETTE[idx % SET2_PALETTE.length];
     });
-    return { groups, groupColorMap };
-  }, [payload.colGroupLabels]);
+    return { groups: orderedGroups, groupColorMap };
+  }, [baseGroups, orderedGroups]);
 
   // Update dimensions on mount and resize
   useEffect(() => {
@@ -276,8 +315,8 @@ const StatHeatMap: React.FC<StatHeatMapProps> = ({ payload }) => {
           >
             Group:
           </text>
-          {payload.columnLabels.map((col, colIdx) => {
-            const group = payload.colGroupLabels[colIdx];
+          {orderedColumns.orderedColumnLabels.map((col, colIdx) => {
+            const group = orderedColumns.orderedColGroupLabels[colIdx];
             const color = groupInfo.groupColorMap[group] || "#666";
             const x = startX + colIdx * scaledDims.cellWidth;
 
@@ -298,7 +337,7 @@ const StatHeatMap: React.FC<StatHeatMapProps> = ({ payload }) => {
 
         {/* Column Headers (Patient/Sample names) */}
         <g key="column-headers">
-          {payload.columnLabels.map((col, colIdx) => {
+          {orderedColumns.orderedColumnLabels.map((col, colIdx) => {
             const x = startX + colIdx * scaledDims.cellWidth;
             const y = 35 + scaledDims.groupBarHeight + scaledDims.cellHeight * 3;
 
@@ -312,7 +351,7 @@ const StatHeatMap: React.FC<StatHeatMapProps> = ({ payload }) => {
                   textAnchor="middle"
                   transform={`rotate(-45, ${x + scaledDims.cellWidth / 2}, ${y})`}
                   onMouseEnter={(e) => {
-                    const content = `${col} (${payload.colGroupLabels[colIdx]})`;
+                    const content = `${col} (${orderedColumns.orderedColGroupLabels[colIdx]})`;
                     if (isModal) {
                       const rect = e.currentTarget.getBoundingClientRect();
                       setModalTooltip({
@@ -366,7 +405,7 @@ const StatHeatMap: React.FC<StatHeatMapProps> = ({ payload }) => {
                 </text>
 
                 {/* Cells */}
-                {payload.columnLabels.map((col, colIdx) => {
+                {orderedColumns.orderedColumnLabels.map((col, colIdx) => {
                   const rawValue = row[col];
                   const value = typeof rawValue === "number" ? rawValue : Number(rawValue);
                   const x = startX + colIdx * scaledDims.cellWidth;

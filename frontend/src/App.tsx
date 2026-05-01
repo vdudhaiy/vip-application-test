@@ -4,6 +4,7 @@ import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import { useAuth } from "./components/UserAuth";
+import "./App.css";
 
 // Lazy load pages for better code splitting
 const DataQualityCheckPage = lazy(() => import("./pages/DataQualityCheckPage"));
@@ -21,142 +22,84 @@ const HomePage = lazy(() => import("./pages/HomePage"));
 
 const App: React.FC = () => {
   const [activeSection, setActiveSection] = useState<string>("Data Upload");
-  const { loading, user } = useAuth(); // ✅ Access loading state and user
+  const { loading, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  
-  // Check if we're in the dashboard section (any route that starts with /Datasets or is /dashboard)
-  const isInDashboard = location.pathname === '/dashboard' || 
-                       location.pathname === '/Datasets' ||
-                       location.pathname.startsWith('/DataQualityCheck') ||
-                       location.pathname.startsWith('/Filter') ||
-                       location.pathname.startsWith('/Normalization') ||
-                       location.pathname.startsWith('/Transformation') ||
-                       location.pathname.startsWith('/Imputation') ||
-                       location.pathname.startsWith('/StatisticalAnalysis');
 
-  // Check if we're on a protected route that requires authentication
-  const isProtectedRoute = isInDashboard || location.pathname === '/profile';
+  const isInDashboard =
+    location.pathname === "/dashboard" ||
+    location.pathname === "/Datasets" ||
+    location.pathname.startsWith("/DataQualityCheck") ||
+    location.pathname.startsWith("/Filter") ||
+    location.pathname.startsWith("/Normalization") ||
+    location.pathname.startsWith("/Transformation") ||
+    location.pathname.startsWith("/Imputation") ||
+    location.pathname.startsWith("/StatisticalAnalysis");
 
-  // Update active section based on current route
+  const isProtectedRoute = isInDashboard || location.pathname === "/profile";
+
   useEffect(() => {
     const path = location.pathname;
-    if (path === '/feedback') {
-      setActiveSection('Feedback');
-    } else if (path === '/' || path === '/home') {
-      setActiveSection('Home');
-    } else if (path === '/dashboard' || path === '/Datasets') {
-      setActiveSection('Dashboard');
+    if (path === "/feedback") {
+      setActiveSection("Feedback");
+    } else if (path === "/" || path === "/home") {
+      setActiveSection("Home");
+    } else if (path === "/dashboard" || path === "/Datasets") {
+      setActiveSection("Dashboard");
     }
   }, [location.pathname]);
 
-  // Redirect logged-out users from protected routes to login
   useEffect(() => {
     if (!loading && !user && isProtectedRoute) {
-      navigate('/login');
+      navigate("/login");
     }
   }, [loading, user, isProtectedRoute, navigate]);
 
   if (loading) {
     return (
-      <div style={{
-        backgroundColor: "#0d1117",
-        color: "#e6edf3",
-        minHeight: "100vh",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        fontSize: "16px",
-        flexDirection: "column",
-        gap: "16px"
-      }}>
-        <div style={{
-          width: "40px",
-          height: "40px",
-          border: "3px solid rgba(88, 166, 255, 0.2)",
-          borderTop: "3px solid #58a6ff",
-          borderRadius: "50%",
-          animation: "spin 1s linear infinite"
-        }} />
-        <style>{`
-          @keyframes spin {
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
+      <div className="loading-screen">
+        <div className="spinner" />
         <span>Initializing...</span>
       </div>
     );
   }
 
   return (
-    <div style={{ 
-      display: "flex", 
+    <div style={{
+      display: "flex",
       width: "100%",
       height: "100%",
       position: "absolute",
       top: 0,
       left: 0,
-      margin: 0,
-      padding: 0,
       overflow: "hidden",
-      backgroundColor: "#0d1117",
-      fontSize: "14px"
     }}>
-      <div style={{ 
-        display: "flex",
-        flexDirection: "column",
-        width: "100%",
-        height: "100%"
-      }}>
+      <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%" }}>
         <Navbar activeSection={activeSection} />
-        
-        <div style={{ 
-          display: "flex",
-          flex: 1,
-          backgroundColor: "#0d1117",
-          overflow: "hidden"
-        }}>
+
+        <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
           {isInDashboard && (
-            <div style={{ 
+            <div style={{
               width: "120px",
-              backgroundColor: "#161b22",
               flexShrink: 0,
-              margin: 0,
-              padding: 0,
-              borderRight: "1px solid #30363d"
+              borderRight: "1px solid var(--border-color)",
             }}>
               <Sidebar onSelectSection={setActiveSection} activeSection={activeSection} />
             </div>
           )}
-          
-          <div style={{ 
+
+          <div style={{
             flex: 1,
-            backgroundColor: "#0d1117",
             overflow: "auto",
             padding: "24px",
             display: "flex",
-            flexDirection: "column"
+            flexDirection: "column",
+            backgroundColor: "var(--bg-primary)",
           }}>
             <Suspense fallback={
-              <div style={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                height: "200px",
-                color: "#e6edf3",
-                flexDirection: "column",
-                gap: "16px"
-              }}>
-                <div style={{
-                  width: "30px",
-                  height: "30px",
-                  border: "2px solid rgba(88, 166, 255, 0.2)",
-                  borderTop: "2px solid #58a6ff",
-                  borderRadius: "50%",
-                  animation: "spin 1s linear infinite"
-                }} />
-                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                <span>Loading page...</span>
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "200px", flexDirection: "column", gap: "16px" }}>
+                <div className="spinner spinner--sm" />
+                <span style={{ color: "var(--text-secondary)", fontSize: "13px" }}>Loading page...</span>
               </div>
             }>
               <Routes>
@@ -165,7 +108,6 @@ const App: React.FC = () => {
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/signup" element={<SignupPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
-                {/* <Route path="/DataUpload" element={<DataUploadPage />} /> */}
                 <Route path="/DataQualityCheck" element={<DataQualityCheckPage />} />
                 <Route path="/Filter" element={<FilterPage />} />
                 <Route path="/Normalization" element={<NormalizationPage />} />
@@ -174,10 +116,10 @@ const App: React.FC = () => {
                 <Route path="/StatisticalAnalysis" element={<StatisticalAnalysisPage />} />
                 <Route path="/" element={<HomePage />} />
                 <Route path="/feedback" element={<FeedbackPage />} />
-                <Route path="*" element={<h2 style={{ color: "#e6edf3" }}>Page Not Found</h2>} />
+                <Route path="*" element={<h2 style={{ color: "var(--text-primary)" }}>Page Not Found</h2>} />
               </Routes>
             </Suspense>
-            
+
             <div style={{ marginTop: "auto" }}>
               <Footer />
             </div>
@@ -187,4 +129,5 @@ const App: React.FC = () => {
     </div>
   );
 };
+
 export default App;

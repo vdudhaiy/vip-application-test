@@ -1,39 +1,59 @@
-/* Reset all default spacing */
+/* ─── Reset ──────────────────────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+/* ─── Design Tokens ──────────────────────────────────────────────────────── */
 :root {
-  /* Dark Mode Color Palette */
-  --bg-primary: #0d1117;
-  --bg-secondary: #161b22;
-  --bg-tertiary: #21262d;
-  --text-primary: #e6edf3;
+  /* Backgrounds */
+  --bg-primary:    #0d1117;
+  --bg-secondary:  #161b22;
+  --bg-tertiary:   #21262d;
+  --bg-elevated:   #2d333b;
+
+  /* Text */
+  --text-primary:   #e6edf3;
   --text-secondary: #8b949e;
-  --text-tertiary: #6e7681;
-  --accent-primary: #58a6ff;
+  --text-tertiary:  #6e7681;
+
+  /* Accent – blue */
+  --accent-primary:   #58a6ff;
   --accent-secondary: #79c0ff;
-  --accent-tertiary: #1f6feb;
+  --accent-tertiary:  #1f6feb;
+  --accent-glow:      rgba(88, 166, 255, 0.15);
+
+  /* Status */
   --accent-success: #3fb950;
   --accent-warning: #d29922;
-  --accent-danger: #f85149;
+  --accent-danger:  #f85149;
+
+  /* Borders */
   --border-color: #30363d;
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --border-muted: #21262d;
+
+  /* Shadows */
+  --shadow-sm:   0 1px 4px rgba(0, 0, 0, 0.5);
+  --shadow-md:   0 4px 16px rgba(0, 0, 0, 0.55);
+  --shadow-lg:   0 8px 32px rgba(0, 0, 0, 0.65);
+  --shadow-glow: 0 0 24px rgba(88, 166, 255, 0.18);
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
 }
 
-body, html {
-  margin: 0;
-  padding: 0;
+/* ─── Base ───────────────────────────────────────────────────────────────── */
+html, body {
   height: 100%;
   width: 100%;
   overflow: hidden;
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
+    sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -49,52 +69,40 @@ body, html {
   left: 0;
 }
 
+/* ─── Links ──────────────────────────────────────────────────────────────── */
 a {
   color: var(--accent-primary);
   text-decoration: none;
   transition: color 0.2s ease;
 }
+a:hover { color: var(--accent-secondary); }
 
-a:hover {
-  color: var(--accent-secondary);
-}
-
+/* ─── Buttons ────────────────────────────────────────────────────────────── */
 button {
-  background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%);
-  color: var(--text-primary);
-  border: 1px solid var(--accent-tertiary);
-  padding: 10px 16px;
-  border-radius: 6px;
+  background: linear-gradient(135deg, var(--accent-tertiary) 0%, var(--accent-primary) 100%);
+  color: #ffffff;
+  border: 1px solid rgba(88, 166, 255, 0.25);
+  padding: 9px 18px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 14px;
+  font-family: inherit;
+  letter-spacing: 0.2px;
   transition: all 0.2s ease;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4),
+              inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
-
 button:hover {
-  background: linear-gradient(135deg, #388bfd 0%, #79c0ff 100%);
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+  box-shadow: 0 4px 18px rgba(88, 166, 255, 0.35), 0 1px 4px rgba(0, 0, 0, 0.4);
   transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
 }
+button:active  { transform: translateY(0); box-shadow: var(--shadow-sm); }
+button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
 
-button:focus,
-button:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-}
-
-button:active {
-  transform: translateY(0);
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
-
-/* Input styling */
+/* ─── Inputs ─────────────────────────────────────────────────────────────── */
 input[type="text"],
 input[type="email"],
 input[type="password"],
@@ -102,16 +110,16 @@ input[type="number"],
 input[type="file"],
 select,
 textarea {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-tertiary);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
   font-size: 14px;
-  transition: all 0.2s ease;
   font-family: inherit;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  width: 100%;
 }
-
 input[type="text"]:focus,
 input[type="email"]:focus,
 input[type="password"]:focus,
@@ -119,71 +127,46 @@ input[type="number"]:focus,
 input[type="file"]:focus,
 select:focus,
 textarea:focus {
-  background-color: var(--bg-tertiary);
+  background-color: var(--bg-elevated);
   border-color: var(--accent-primary);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.14);
 }
+input::placeholder { color: var(--text-tertiary); }
+input[type="file"] { padding: 10px; cursor: pointer; }
+select { cursor: pointer; }
+textarea { resize: vertical; min-height: 100px; }
 
-input[type="file"] {
-  padding: 10px;
-}
-
-select {
-  cursor: pointer;
-}
-
-textarea {
-  resize: vertical;
-  min-height: 100px;
-}
-
-/* Tables */
+/* ─── Tables ─────────────────────────────────────────────────────────────── */
 table {
   border-collapse: collapse;
   width: 100%;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   overflow: hidden;
+  background-color: var(--bg-secondary);
+  box-shadow: var(--shadow-sm);
 }
-
-th,
-td {
+th, td {
   border-bottom: 1px solid var(--border-color);
-  padding: 12px;
+  padding: 12px 16px;
   text-align: left;
 }
-
 th {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
+  background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+  color: var(--accent-secondary);
   font-weight: 600;
-  border-bottom: 2px solid var(--accent-primary);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  border-bottom: 1px solid var(--border-color);
 }
+td { color: var(--text-primary); }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background-color: rgba(88, 166, 255, 0.04); }
 
-tr:hover {
-  background-color: rgba(88, 166, 255, 0.05);
-}
-
-tr:last-child td {
-  border-bottom: none;
-}
-
-/* Scrollbar */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 5px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-primary);
-}
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--bg-elevated); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-primary); }

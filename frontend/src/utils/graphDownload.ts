@@ -109,7 +109,9 @@ export function useGraphDownload() {
 export async function downloadVolcanoPlot(
   datasetId: string,
   referenceGroup?: string,
-  contrast?: string
+  contrast?: string,
+  fcThreshold?: number,
+  pThreshold?: number
 ): Promise<void> {
   const token = localStorage.getItem('token');
 
@@ -125,6 +127,12 @@ export async function downloadVolcanoPlot(
     }
     if (contrast) {
       url.searchParams.append('contrast', contrast);
+    }
+    if (fcThreshold !== undefined) {
+      url.searchParams.append('fc_threshold', fcThreshold.toString());
+    }
+    if (pThreshold !== undefined) {
+      url.searchParams.append('p_threshold', pThreshold.toString());
     }
 
     const response = await fetch(url.toString(), {
@@ -168,7 +176,8 @@ export async function downloadHeatmap(
   datasetId: string,
   topN: number = 20,
   aggregateToProteinLevel: boolean = true,
-  aggregationMethod: string = 'mean'
+  aggregationMethod: string = 'mean',
+  groupOrder: string[] = []
 ): Promise<void> {
   const token = localStorage.getItem('token');
 
@@ -182,6 +191,9 @@ export async function downloadHeatmap(
     url.searchParams.append('top_n', topN.toString());
     url.searchParams.append('aggregate_to_protein_level', aggregateToProteinLevel.toString());
     url.searchParams.append('aggregation_method', aggregationMethod);
+    groupOrder.forEach((group) => {
+      url.searchParams.append('group_order', group);
+    });
 
     const response = await fetch(url.toString(), {
       method: 'GET',

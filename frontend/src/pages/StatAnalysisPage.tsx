@@ -57,6 +57,39 @@ const StatAnalysisPage: React.FC = () => {
   const [downloadVolcanoError, setDownloadVolcanoError] = useState<string | null>(null);
   const [isDownloadingHeatmap, setIsDownloadingHeatmap] = useState<boolean>(false);
   const [downloadHeatmapError, setDownloadHeatmapError] = useState<string | null>(null);
+  const [groupOrder, setGroupOrder] = useState<string[]>([]);
+  const [draggingGroup, setDraggingGroup] = useState<string | null>(null);
+  const [referenceGroup, setReferenceGroup] = useState<string | null>(null);
+  const [log2fcThresh, setLog2fcThresh] = useState<number>(0.58);
+  const [qvalThresh, setQvalThresh] = useState<number>(0.05);
+  const [pvalThresh, setPvalThresh] = useState<number>(0.05);
+  const [cachedVolcanoPlotData, setCachedVolcanoPlotData] = useState<any>(null);
+  const [cachedHeatmapPlotData, setCachedHeatmapPlotData] = useState<any>(null);
+  const [lastCachedParams, setLastCachedParams] = useState<any>(null);
+  const [volcanoReferenceGroup, setVolcanoReferenceGroup] = useState<string | null>(null);
+  const [volcanoContrast, setVolcanoContrast] = useState<string>("");
+  const [volcanoFcThreshold, setVolcanoFcThreshold] = useState<number>(0);
+  const [volcanoPThreshold, setVolcanoPThreshold] = useState<number>(0);
+
+  const getUniqueGroups = (labels: string[]) => {
+    const seen = new Set<string>();
+    return labels.filter((label) => {
+      if (seen.has(label)) {
+        return false;
+      }
+      seen.add(label);
+      return true;
+    });
+  };
+
+  const mergeGroupOrder = (current: string[], next: string[]) => {
+    if (current.length === 0) {
+      return next;
+    }
+    const filtered = current.filter((group) => next.includes(group));
+    const missing = next.filter((group) => !filtered.includes(group));
+    return [...filtered, ...missing];
+  };
 
   useEffect(() => {
     const fetchAnalysisData = async () => {
@@ -70,48 +103,149 @@ const StatAnalysisPage: React.FC = () => {
       }
 
       try {
-        // Fetch volcano plot data
-        const volcanoUrl = `${API_ENDPOINTS.VOLCANO_PLOT_DATA}?dataset_id=${dataset_id}`;
-        console.log('[analysis] GET volcano plot data from', volcanoUrl);
-        const volcanoResponse = await fetch(volcanoUrl, {
+        // Step 1: Fetch cached analysis data (parameters + plot data)
+        console.log('[analysis] Fetching cached analysis data...');
+        const cachedUrl = `${API_ENDPOINTS.CACHED_ANALYSIS_DATA}?dataset_id=${dataset_id}`;
+        const cachedResponse = await fetch(cachedUrl, {
           headers: {
             Authorization: `Token ${token}`,
             "Content-Type": "application/json",
           },
         });
 
-        if (!volcanoResponse.ok) {
-          throw new Error(`Volcano plot fetch failed: ${volcanoResponse.statusText}`);
+        let hasCachedVolcano = false;
+        let hasCachedHeatmap = false;
+        let volcanoJson: any = null;
+        let heatmapJson: any = null;
+        let cachedVolcanoPlotData: any = null;
+        let cachedHeatmapPlotData: any = null;
+        let cachedVolcanoTableData: any = null;
+
+        if (cachedResponse.ok) {
+          const cachedData = await cachedResponse.json();
+          console.log('[analysis] Cached data received:', cachedData);
+
+          // Pre-populate heatmap parameters from cache
+          if (cachedData.heatmap?.parameters) {
+            const heatmapParams = cachedData.heatmap.parameters;
+            setTopN(heatmapParams.top_n || 20);
+            setAggregateToProteinLevel(heatmapParams.aggregate_to_protein_level ?? true);
+            setAggregationMethod(heatmapParams.aggregation_method || "mean");
+            if (heatmapParams.group_order && heatmapParams.group_order.length > 0) {
+              setGroupOrder(heatmapParams.group_order);
+            }
+            console.log('[analysis] Heatmap params pre-populated:', heatmapParams);
+
+            // If cached plot data exists AND has the right structure, use it
+            if (cachedData.heatmap?.plot_data && 
+                cachedData.heatmap.plot_data.matrix && 
+                cachedData.heatmap.plot_data.column_labels) {
+              hasCachedHeatmap = true;
+              cachedHeatmapPlotData = cachedData.heatmap.plot_data;
+              console.log('[analysis] Using cached heatmap plot data');
+            } else {
+              console.log('[analysis] Heatmap cache exists but structure invalid, will fetch fresh');
+            }
+          }
+
+          // Pre-populate volcano parameters from cache
+          if (cachedData.volcano?.parameters) {
+            const volcanoParams = cachedData.volcano.parameters;
+            setReferenceGroup(volcanoParams.reference_group);
+            setLog2fcThresh(volcanoParams.log2fc_thresh || 0.58);
+            setQvalThresh(volcanoParams.qval_thresh || 0.05);
+            setPvalThresh(volcanoParams.pval_thresh || 0.05);
+            console.log('[analysis] Volcano params pre-populated:', volcanoParams);
+
+            // Use cache only if it has volcano_data (simple volcano, not pairwise)
+            // Pairwise volcanos are NOT cached since they're reference_group dependent and interactive
+            if (cachedData.volcano?.plot_data?.volcano_data) {
+              hasCachedVolcano = true;
+              cachedVolcanoPlotData = cachedData.volcano.plot_data;
+              cachedVolcanoTableData = cachedData.volcano.table_data || null;
+              console.log('[analysis] Using cached volcano plot data (simple 2-group or multi-group without reference)');
+            } else {
+              console.log('[analysis] Volcano cache missing or contains pairwise structure, will fetch fresh');
+            }
+          }
+
+          // Store cached params for later comparison
+          setLastCachedParams({
+            heatmap: cachedData.heatmap?.parameters,
+            volcano: cachedData.volcano?.parameters,
+          });
         }
 
-        const volcanoJson = await volcanoResponse.json();
+        // Step 2: If we have both cached plot data, use it directly and skip fresh fetches
+        if (hasCachedVolcano && hasCachedHeatmap) {
+          console.log('[analysis] Both cached plots available, using cache directly');
+          volcanoJson = cachedVolcanoPlotData;
+          heatmapJson = cachedHeatmapPlotData;
+        } else {
+          // Otherwise fetch fresh data
+          console.log('[analysis] Cache incomplete, fetching fresh data...');
 
-        // Fetch heatmap data
-        const heatmapUrl = `${API_ENDPOINTS.HEATMAP_DATA}?dataset_id=${dataset_id}&top_n=20&aggregate_to_protein_level=true&aggregation_method=mean`;
-        console.log('[analysis] GET heatmap data from', heatmapUrl);
-        const heatmapResponse = await fetch(heatmapUrl, {
-          headers: {
-            Authorization: `Token ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
+          // Fetch fresh volcano plot data
+          if (!hasCachedVolcano) {
+            const volcanoUrl = `${API_ENDPOINTS.VOLCANO_PLOT_DATA}?dataset_id=${dataset_id}`;
+            console.log('[analysis] GET volcano plot data from', volcanoUrl);
+            const volcanoResponse = await fetch(volcanoUrl, {
+              headers: {
+                Authorization: `Token ${token}`,
+                "Content-Type": "application/json",
+              },
+            });
 
-        if (!heatmapResponse.ok) {
-          throw new Error(`Heatmap fetch failed: ${heatmapResponse.statusText}`);
+            if (!volcanoResponse.ok) {
+              throw new Error(`Volcano plot fetch failed: ${volcanoResponse.statusText}`);
+            }
+            volcanoJson = await volcanoResponse.json();
+          } else {
+            volcanoJson = cachedVolcanoPlotData;
+          }
+
+          // Fetch fresh heatmap data
+          if (!hasCachedHeatmap) {
+            const heatmapUrl = new URL(API_ENDPOINTS.HEATMAP_DATA);
+            heatmapUrl.searchParams.append('dataset_id', dataset_id);
+            heatmapUrl.searchParams.append('top_n', '20');
+            heatmapUrl.searchParams.append('aggregate_to_protein_level', 'true');
+            heatmapUrl.searchParams.append('aggregation_method', 'mean');
+            groupOrder.forEach((group) => heatmapUrl.searchParams.append('group_order', group));
+            console.log('[analysis] GET heatmap data from', heatmapUrl);
+            const heatmapResponse = await fetch(heatmapUrl.toString(), {
+              headers: {
+                Authorization: `Token ${token}`,
+                "Content-Type": "application/json",
+              },
+            });
+
+            if (!heatmapResponse.ok) {
+              throw new Error(`Heatmap fetch failed: ${heatmapResponse.statusText}`);
+            }
+            heatmapJson = await heatmapResponse.json();
+          } else {
+            heatmapJson = cachedHeatmapPlotData;
+          }
         }
 
-        const heatmapJson = await heatmapResponse.json();
-        
-        // For backward compatibility, create a results array from the volcano data
-        // The volcano endpoint returns the raw statistical results
+        // Step 3: Process the data (cached or fresh)
         const volcanoData = volcanoJson.volcano_data || [];
-        const tableData: DataRow[] = volcanoData.map((item: any, index: number) => ({
-          id: index + 1,
-          name: item.Protein,
-          value: item.statistic !== null && item.statistic !== undefined ? parseFloat(item.statistic) : 0,
-        }));
+        
+        // Use cached table data if available, otherwise construct from volcanoData
+        let tableData: DataRow[];
+        if (cachedVolcanoTableData && hasCachedVolcano) {
+          tableData = cachedVolcanoTableData;
+          console.log('[analysis] Using cached table data');
+        } else {
+          tableData = volcanoData.map((item: any, index: number) => ({
+            id: index + 1,
+            name: item.Protein,
+            value: item.statistic !== null && item.statistic !== undefined ? parseFloat(item.statistic) : 0,
+          }));
+          console.log('[analysis] Constructed table data from volcanoData');
+        }
 
-        // Extract groups from volcano response
         const groups: string[] = volcanoJson.groups || [];
 
         const volcanoPoints: VolcanoPoint[] = volcanoData.map(
@@ -156,7 +290,21 @@ const StatAnalysisPage: React.FC = () => {
           volcano: volcanoPoints.length,
           heatmapRows: heatmapData.length,
           groups: new Set(heatmapJson.col_group_labels || []).size,
+          usingCache: hasCachedVolcano && hasCachedHeatmap,
         });
+
+        // Store cached plot data in state for reference
+        if (hasCachedVolcano) {
+          setCachedVolcanoPlotData(cachedVolcanoPlotData);
+        }
+        if (hasCachedHeatmap) {
+          setCachedHeatmapPlotData(cachedHeatmapPlotData);
+        }
+        if (cachedVolcanoTableData) {
+          // Store cached table data if available
+          console.log('[analysis] Storing cached table data in state');
+        }
+
         setData({ tableData, volcanoData: volcanoPoints, heatmapPayload, groups });
       } catch (err: any) {
         console.error("Error fetching analysis data:", err);
@@ -188,6 +336,15 @@ const StatAnalysisPage: React.FC = () => {
     }
   }, [data?.heatmapPayload.aggregation_method]);
 
+  useEffect(() => {
+    if (!data) {
+      return;
+    }
+
+    const nextOrder = getUniqueGroups(data.heatmapPayload.colGroupLabels || []);
+    setGroupOrder((prev) => mergeGroupOrder(prev, nextOrder));
+  }, [data?.heatmapPayload.colGroupLabels]);
+
   const handleApplyTopN = async () => {
     console.log('[heatmap] handleApplyTopN called with topN =', topN, 'aggregateToProteinLevel =', aggregateToProteinLevel, 'aggregationMethod =', aggregationMethod);
     if (!data) {
@@ -201,9 +358,14 @@ const StatAnalysisPage: React.FC = () => {
       const dataset_id = localStorage.getItem("selectedDatasetId");
       const token = localStorage.getItem("token");
 
-      const url = `${API_ENDPOINTS.HEATMAP_DATA}?dataset_id=${dataset_id}&top_n=${topN}&aggregate_to_protein_level=${aggregateToProteinLevel}&aggregation_method=${aggregationMethod}`;
-      console.log('[heatmap] Fetching with top_n =', topN, 'aggregate_to_protein_level =', aggregateToProteinLevel, 'aggregation_method =', aggregationMethod, 'URL:', url);
-      const response = await fetch(url, {
+      const url = new URL(API_ENDPOINTS.HEATMAP_DATA);
+      url.searchParams.append('dataset_id', dataset_id || '');
+      url.searchParams.append('top_n', topN.toString());
+      url.searchParams.append('aggregate_to_protein_level', aggregateToProteinLevel.toString());
+      url.searchParams.append('aggregation_method', aggregationMethod);
+      groupOrder.forEach((group) => url.searchParams.append('group_order', group));
+      console.log('[heatmap] Fetching with top_n =', topN, 'aggregate_to_protein_level =', aggregateToProteinLevel, 'aggregation_method =', aggregationMethod, 'URL:', url.toString());
+      const response = await fetch(url.toString(), {
         headers: {
           Authorization: `Token ${token}`,
           "Content-Type": "application/json",
@@ -262,7 +424,7 @@ const StatAnalysisPage: React.FC = () => {
       if (!datasetId) {
         throw new Error("Dataset ID not found");
       }
-      await downloadVolcanoPlot(datasetId);
+      await downloadVolcanoPlot(datasetId, volcanoReferenceGroup ?? undefined, volcanoContrast || undefined, volcanoFcThreshold, volcanoPThreshold);
     } catch (err: any) {
       console.error("Error downloading volcano plot:", err);
       setDownloadVolcanoError(err.message || "Failed to download volcano plot");
@@ -279,13 +441,49 @@ const StatAnalysisPage: React.FC = () => {
       if (!datasetId) {
         throw new Error("Dataset ID not found");
       }
-      await downloadHeatmap(datasetId, topN, aggregateToProteinLevel, aggregationMethod);
+      await downloadHeatmap(datasetId, topN, aggregateToProteinLevel, aggregationMethod, groupOrder);
     } catch (err: any) {
       console.error("Error downloading heatmap:", err);
       setDownloadHeatmapError(err.message || "Failed to download heatmap");
     } finally {
       setIsDownloadingHeatmap(false);
     }
+  };
+
+  const handleDragStart = (group: string) => {
+    setDraggingGroup(group);
+  };
+
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+  };
+
+  const handleDrop = (targetGroup: string) => {
+    if (!draggingGroup || draggingGroup === targetGroup) {
+      setDraggingGroup(null);
+      return;
+    }
+
+    setGroupOrder((prev) => {
+      const next = [...prev];
+      const fromIndex = next.indexOf(draggingGroup);
+      const toIndex = next.indexOf(targetGroup);
+      if (fromIndex === -1 || toIndex === -1) {
+        return prev;
+      }
+      next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, draggingGroup);
+      return next;
+    });
+
+    setDraggingGroup(null);
+  };
+
+  const handleResetGroupOrder = () => {
+    if (!data) {
+      return;
+    }
+    setGroupOrder(getUniqueGroups(data.heatmapPayload.colGroupLabels || []));
   };
 
   if (error) {
@@ -412,7 +610,14 @@ const StatAnalysisPage: React.FC = () => {
               borderRadius: "8px",
               minHeight: 0,
             }}>
-            <StatVolcanoPlot data={data.volcanoData} groups={data.groups} datasetId={localStorage.getItem("selectedDatasetId") || ""} />
+            <StatVolcanoPlot
+              data={data.volcanoData}
+              groups={data.groups}
+              datasetId={localStorage.getItem("selectedDatasetId") || ""}
+              onReferenceGroupChange={setVolcanoReferenceGroup}
+              onContrastChange={setVolcanoContrast}
+              onThresholdChange={(fc, p) => { setVolcanoFcThreshold(fc); setVolcanoPThreshold(p); }}
+            />
           </div>
         </div>
 
@@ -494,6 +699,58 @@ const StatAnalysisPage: React.FC = () => {
               >
                 {isLoadingHeatmap ? "Applying..." : "Apply"}
               </button>
+              {groupOrder.length > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    flexWrap: "wrap",
+                    marginLeft: "10px",
+                  }}
+                >
+                  <span style={{ fontSize: "12px", color: "#aaa", whiteSpace: "nowrap" }}>
+                    Group order (left to right):
+                  </span>
+                  {groupOrder.map((group) => (
+                    <div
+                      key={`group-order-${group}`}
+                      draggable
+                      onDragStart={() => handleDragStart(group)}
+                      onDragOver={handleDragOver}
+                      onDrop={() => handleDrop(group)}
+                      onDragEnd={() => setDraggingGroup(null)}
+                      style={{
+                        padding: "4px 8px",
+                        backgroundColor: draggingGroup === group ? "#3a3a3a" : "#2b2b2b",
+                        border: "1px solid #555",
+                        borderRadius: "4px",
+                        fontSize: "11px",
+                        color: "#eee",
+                        cursor: "grab",
+                        userSelect: "none",
+                      }}
+                      title="Drag to reorder"
+                    >
+                      {group}
+                    </div>
+                  ))}
+                  <button
+                    onClick={handleResetGroupOrder}
+                    style={{
+                      padding: "4px 8px",
+                      backgroundColor: "#444",
+                      color: "#fff",
+                      border: "1px solid #666",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      fontSize: "11px",
+                    }}
+                  >
+                    Reset order
+                  </button>
+                </div>
+              )}
               <label style={{ fontSize: "12px", color: "#aaa", whiteSpace: "nowrap", marginLeft: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
                 <input
                   type="checkbox"
@@ -536,7 +793,7 @@ const StatAnalysisPage: React.FC = () => {
             borderRadius: "8px",
             minHeight: 0,
           }}>
-            <StatHeatMap payload={data.heatmapPayload} />
+            <StatHeatMap payload={data.heatmapPayload} groupOrder={groupOrder} />
           </div>
         </div>
       </div>
