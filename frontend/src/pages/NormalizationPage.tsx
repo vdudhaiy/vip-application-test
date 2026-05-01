@@ -86,7 +86,11 @@ const NormalizationPage: React.FC = () => {
   const fetchEntries = React.useCallback(() => {
     const dataset_id = localStorage.getItem("selectedDatasetId");
     const token = localStorage.getItem("token");
-    if (!dataset_id || !token) return;
+    if (!dataset_id || !token) {
+      setError("No dataset selected. Please upload and select a dataset first.");
+      setLoading(false);
+      return;
+    }
 
     axios
       .get(`${API_ENDPOINTS.NORMAL}?dataset_id=${dataset_id}&get_entries=true`, {
@@ -95,9 +99,15 @@ const NormalizationPage: React.FC = () => {
       .then((response) => {
         const fetchedEntries = response.data.entries || [];
         setEntries(fetchedEntries);
+        if (fetchedEntries.length === 0) {
+          setError("No data available. Please upload data for the selected dataset first.");
+          setLoading(false);
+        }
       })
       .catch((err) => {
         console.error("Error fetching entries:", err);
+        setError("No data available. Please upload data for the selected dataset first.");
+        setLoading(false);
       });
   }, []);
 

@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def root(request):
-    return Response({"message": "Welcome to the VIP API"}, status=status.HTTP_200_OK)
+    return Response({"message": "Welcome to the TaoMS API"}, status=status.HTTP_200_OK)
 
 
 # Health Check View

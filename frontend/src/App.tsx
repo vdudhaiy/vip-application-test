@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from "react";
-import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
@@ -24,7 +24,6 @@ const App: React.FC = () => {
   const [activeSection, setActiveSection] = useState<string>("Data Upload");
   const { loading, user } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
 
   const isInDashboard =
     location.pathname === "/dashboard" ||
@@ -35,8 +34,6 @@ const App: React.FC = () => {
     location.pathname.startsWith("/Transformation") ||
     location.pathname.startsWith("/Imputation") ||
     location.pathname.startsWith("/StatisticalAnalysis");
-
-  const isProtectedRoute = isInDashboard || location.pathname === "/profile";
 
   useEffect(() => {
     const path = location.pathname;
@@ -49,11 +46,8 @@ const App: React.FC = () => {
     }
   }, [location.pathname]);
 
-  useEffect(() => {
-    if (!loading && !user && isProtectedRoute) {
-      navigate("/login");
-    }
-  }, [loading, user, isProtectedRoute, navigate]);
+  const requireAuth = (element: React.ReactElement) =>
+    user ? element : <Navigate to="/login" replace />;
 
   if (loading) {
     return (
@@ -103,17 +97,17 @@ const App: React.FC = () => {
               </div>
             }>
               <Routes>
-                <Route path="/dashboard" element={<DatasetPage />} />
-                <Route path="/Datasets" element={<DatasetPage />} />
+                <Route path="/dashboard" element={requireAuth(<DatasetPage />)} />
+                <Route path="/Datasets" element={requireAuth(<DatasetPage />)} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/signup" element={<SignupPage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/DataQualityCheck" element={<DataQualityCheckPage />} />
-                <Route path="/Filter" element={<FilterPage />} />
-                <Route path="/Normalization" element={<NormalizationPage />} />
-                <Route path="/Transformation" element={<TransformationPage />} />
-                <Route path="/Imputation" element={<ImputationPage />} />
-                <Route path="/StatisticalAnalysis" element={<StatisticalAnalysisPage />} />
+                <Route path="/profile" element={requireAuth(<ProfilePage />)} />
+                <Route path="/DataQualityCheck" element={requireAuth(<DataQualityCheckPage />)} />
+                <Route path="/Filter" element={requireAuth(<FilterPage />)} />
+                <Route path="/Normalization" element={requireAuth(<NormalizationPage />)} />
+                <Route path="/Transformation" element={requireAuth(<TransformationPage />)} />
+                <Route path="/Imputation" element={requireAuth(<ImputationPage />)} />
+                <Route path="/StatisticalAnalysis" element={requireAuth(<StatisticalAnalysisPage />)} />
                 <Route path="/" element={<HomePage />} />
                 <Route path="/feedback" element={<FeedbackPage />} />
                 <Route path="*" element={<h2 style={{ color: "var(--text-primary)" }}>Page Not Found</h2>} />

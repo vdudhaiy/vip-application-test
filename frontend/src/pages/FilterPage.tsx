@@ -94,7 +94,13 @@ const FilterPage: React.FC = () => {
     setLoading(true);
     const dataset_id = localStorage.getItem('selectedDatasetId')
     const token = localStorage.getItem('token')
-    
+
+    if (!dataset_id) {
+      setError('No dataset selected. Please upload and select a dataset first.');
+      setLoading(false);
+      return;
+    }
+
     // First, check if there are existing filter parameters
     axios.get(`${API_ENDPOINTS.FILTER}?dataset_id=${dataset_id}`, {
       headers: {

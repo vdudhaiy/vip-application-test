@@ -20,7 +20,7 @@ const Navbar: React.FC<NavbarProps> = ({ activeSection }) => {
   return (
     <div className="navbar">
       <div className="navbar-brand" onClick={() => navigate("/")}>
-        VIP
+        TaoMS
       </div>
 
       <ul className="navbar-links">

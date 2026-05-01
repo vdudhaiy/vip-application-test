@@ -46,6 +46,13 @@ const TransformationPage: React.FC = () => {
     setLoading(true);
     const dataset_id = localStorage.getItem('selectedDatasetId')
     const token = localStorage.getItem('token')
+
+    if (!dataset_id) {
+      setError('No dataset selected. Please upload and select a dataset first.');
+      setLoading(false);
+      return;
+    }
+
     axios.get(`${API_ENDPOINTS.TRANSFORM}?dataset_id=${dataset_id}`, {
       headers: {
         Authorization: `Token ${token}`,

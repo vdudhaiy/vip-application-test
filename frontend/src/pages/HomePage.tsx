@@ -13,23 +13,57 @@ const HomePage: React.FC = () => {
     <div className="home-container">
       {/* Hero Section */}
       <div className="hero-section">
-        <h1 className="hero-title">VIP Mass Spectrometry Analysis Platform</h1>
+        <h1 className="hero-title">TaoMS</h1>
         <p className="hero-subtitle">
-          Comprehensive data analysis and visualization for mass spectrometry research
+          Proteomics data analysis and visualization — built for the Tao Lab at Purdue University
         </p>
         <button className="cta-button" onClick={handleGetStarted}>
           Get Started
         </button>
       </div>
 
+      {/* About / Prototype Notice Section */}
+      <div className="content-section about-notice">
+        <h2>🎓 About This Application</h2>
+        <p>
+          TaoMS is a <strong>prototype application</strong> developed by undergraduate students
+          at <strong>Purdue University</strong> as part of the{" "}
+          <strong>Vertically Integrated Projects (VIP) Program</strong>, within the{" "}
+          <strong>AI Omics</strong> team — a multidisciplinary group working at the intersection
+          of artificial intelligence and multi-omics data analysis.
+        </p>
+        <p>
+          The objective of TaoMS is to provide an accessible, end-to-end data analysis tool
+          catered to the proteomics research being conducted at the{" "}
+          <strong>Tao Lab</strong> at Purdue University. The platform guides researchers through
+          the complete mass spectrometry data pipeline — from raw data upload and quality
+          assessment, through filtering, normalization, log₂ transformation, and missing-value
+          imputation, to advanced statistical analysis — making rigorous proteomics workflows
+          accessible without requiring specialized programming expertise.
+        </p>
+        <p>
+          As a VIP project, TaoMS is continuously developed and improved across successive
+          semesters, with student contributors spanning computer science, data science, and
+          bioinformatics.
+        </p>
+        <div className="about-tags">
+          <span className="about-tag">🏫 Purdue University</span>
+          <span className="about-tag">🔬 AI Omics VIP Team</span>
+          <span className="about-tag">🧬 Tao Lab</span>
+          <span className="about-tag">⚗️ Proteomics Research</span>
+          <span className="about-tag">🚧 Prototype</span>
+        </div>
+      </div>
+
       {/* Overview Section */}
       <div className="content-section">
-        <h2>Welcome to VIP</h2>
+        <h2>Welcome to TaoMS</h2>
         <p>
-          The VIP Application is a comprehensive platform for mass spectrometry data analysis, 
-          statistical analysis, and visualization. Whether you're analyzing proteomics data, 
-          metabolomics results, or other mass spectrometry experiments, VIP provides an integrated 
-          workflow for data exploration, quality control, and insights discovery.
+          TaoMS is a comprehensive platform for mass spectrometry data analysis,
+          statistical analysis, and visualization. Whether you're processing raw proteomics
+          data, exploring sample distributions, or identifying differentially expressed proteins,
+          TaoMS provides an integrated workflow for data exploration, quality control, and
+          insights discovery.
         </p>
       </div>
 
@@ -158,7 +192,7 @@ group_A,group_A,group_B,group_B,group_A
             <div className="step-number">8</div>
             <div className="step-content">
               <h3>Imputation</h3>
-              <p>Handle missing values in your dataset using imputation methods. The VIP platform supports various imputation strategies to ensure that all data points are available for downstream analysis.</p>
+              <p>Handle missing values in your dataset using imputation methods. TaoMS supports various imputation strategies to ensure that all data points are available for downstream analysis.</p>
             </div>
           </div>
 
@@ -227,7 +261,7 @@ group_A,group_A,group_B,group_B,group_A
         <ul>
           <li>Check our documentation for detailed guides and examples</li>
           <li>Review the file format specifications above to ensure your data is in the correct format</li>
-          <li>Use the <strong>Feedback</strong> option in the navigation to report issues or suggest improvements</li>
+          <li>Use the <strong>Feedback</strong> option in the navigation to report issues or suggest improvements to the TaoMS team</li>
           <li>Contact your system administrator for technical support</li>
         </ul>
       </div>

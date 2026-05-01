@@ -12,7 +12,7 @@ const FeedbackPage: React.FC = () => {
       <div className="feedback-header">
         <h1 className="feedback-title">Report Issues & Suggestions</h1>
         <p className="feedback-subtitle">
-          Help us improve VIP by reporting bugs, requesting features, or sharing feedback directly on GitHub
+          Help us improve TaoMS by reporting bugs, requesting features, or sharing feedback directly on GitHub
         </p>
       </div>
 
@@ -247,8 +247,8 @@ Any other relevant information.`}</pre>
 
       {/* Call to Action */}
       <div className="feedback-section cta-section">
-        <h2>Ready to Help Improve VIP?</h2>
-        <p>We value your input and feedback! Submit your first issue to help us make VIP better.</p>
+        <h2>Ready to Help Improve TaoMS?</h2>
+        <p>We value your input and feedback! Submit your first issue to help us make TaoMS better.</p>
         <a 
           href={newIssueUrl} 
           target="_blank" 

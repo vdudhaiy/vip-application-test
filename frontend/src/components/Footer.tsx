@@ -9,8 +9,8 @@ const Footer: React.FC = () => {
     <footer className="footer">
       <div className="footer-container">
         <div className="footer-section">
-          <h4>About VIP</h4>
-          <p>VIP is a comprehensive mass spectrometry data analysis and visualization platform designed for researchers and data scientists.</p>
+          <h4>About TaoMS</h4>
+          <p>TaoMS is a proteomics data analysis platform developed by the AI Omics VIP team at Purdue University, tailored to the research needs of the Tao Lab.</p>
         </div>
         <div className="footer-section">
           <h4>Quick Links</h4>
@@ -38,7 +38,7 @@ const Footer: React.FC = () => {
         </div>
       </div>
       <div className="footer-bottom">
-        <p>&copy; 2026 VIP Mass Spectrometry Analysis Platform. All rights reserved.</p>
+        <p>&copy; 2026 TaoMS — AI Omics VIP Team, Purdue University. All rights reserved.</p>
         <p><a href="https://github.com/vdudhaiy/vip-application-test" target="_blank" rel="noopener noreferrer">View on GitHub</a></p>
       </div>
     </footer>
