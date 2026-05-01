@@ -6,7 +6,7 @@ services:
     environment:
       - DEBUG=True
     ports:
-      - "8000:8000"
+      - "8080:8000"
     volumes:
       - ./backend:/app
       - backend_static:/app/static
