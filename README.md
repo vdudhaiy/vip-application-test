@@ -126,20 +126,20 @@ For the fastest way to get the application running:
    ```
 
 2. Create your environment file:
-  ```
-  cp .env.sample .env
-  ```
+   ```
+   cp .env.sample .env
+   ```
 
 3. Open Docker Desktop (required for this method)
 
 4. Run the application with Docker:
    - **Linux/MacOS:**
      ```
-    make run
+     make run
      ```
    - **Windows:**
      ```
-    .\dev.ps1 run
+     .\dev.ps1 run
      ```
 
 5. Access the application at `http://localhost:3000` (frontend) and `http://localhost:8000` (API)
