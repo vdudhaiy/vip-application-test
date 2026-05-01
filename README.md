@@ -18,6 +18,7 @@ Whether you're analyzing proteomics data, metabolomics results, or other mass sp
 - [Features & Capabilities](#features--capabilities)
 - [Data Format Specifications](#data-format-specifications)
 - [Prerequisites](#prerequisites)
+- [Environment Configuration](#environment-configuration)
 - [Quick Start](#quick-start)
 - [Project Structure](#project-structure)
 - [Local Development Setup](#local-development-setup)
@@ -87,10 +88,32 @@ The VIP Application provides comprehensive tools for mass spectrometry data anal
 
 Before you begin, ensure you have the following installed on your system:
 
-- **Python 3.8+** (for backend development)
-- **Node.js 14+** and **npm** (for frontend)
+- **Python 3.11+** (for backend development)
+- **Node.js 18+** and **npm** (Node 20 recommended to match the Docker image)
 - **Docker Desktop** (for containerized deployment)
 - **Git** (for version control)
+
+## Environment Configuration
+
+The application expects the following environment variables:
+
+- `DJANGO_SECRET_KEY`
+- `DEBUG` (set to `True` or `False`)
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `POSTGRES_HOST`
+
+Start by copying the sample file and updating values:
+
+```
+cp .env.sample .env
+```
+
+Notes:
+
+- When running with Docker, Docker Compose loads the environment file at the repository root.
+- When running the backend natively (without Docker), either export these variables in your shell or place them in an environment file inside the backend directory (Django loads environment variables from that file).
 
 ## Quick Start
 
@@ -102,19 +125,24 @@ For the fastest way to get the application running:
    cd vip-application-test
    ```
 
-2. Open Docker Desktop (required for this method)
+2. Create your environment file:
+  ```
+  cp .env.sample .env
+  ```
 
-3. Run the application with Docker:
+3. Open Docker Desktop (required for this method)
+
+4. Run the application with Docker:
    - **Linux/MacOS:**
      ```
-     make up
+    make run
      ```
    - **Windows:**
      ```
-     .\dev.ps1 up
+    .\dev.ps1 run
      ```
 
-4. Access the application at `http://localhost:3000` (frontend) and `http://localhost:8000` (API)
+5. Access the application at `http://localhost:3000` (frontend) and `http://localhost:8000` (API)
 
 For detailed setup instructions, see [Local Development Setup](#local-development-setup).
 
@@ -155,7 +183,7 @@ For detailed setup instructions, see [Local Development Setup](#local-developmen
 ### Backend
 - **Framework**: Django 5.2 with Django REST Framework
 - **Language**: Python 3.11
-- **Database**: SQLite (local development), PostgreSQL (production-ready)
+- **Database**: PostgreSQL (Docker and local development); SQLite for tests/CI
 - **Key Libraries**:
   - **Data Analysis**: Pandas, NumPy, SciPy
   - **Statistics**: Statsmodels, Patsy
@@ -228,7 +256,8 @@ vip-application-test/
 ```
 git clone https://github.com/vdudhaiy/vip-application-test.git
 ```
-2. Run the following commands (while in the root directory of the project) to create the virtual environment:
+2. Configure environment variables (see [Environment Configuration](#environment-configuration)).
+3. Run the following commands (while in the root directory of the project) to create the virtual environment:
 ```
 cd backend
 ```
@@ -240,7 +269,7 @@ Windows:
 ```
 python -m venv venv
 ```
-3. Stay in the backend directory and activate the virtual environment:
+4. Stay in the backend directory and activate the virtual environment:
 Linux/Mac:
 ```
 source venv/bin/activate
@@ -253,14 +282,42 @@ venv/Scripts/activate
 ```
 pip install -r requirements.txt
 ```
+6. Ensure Postgres is running and matches your configured environment values, then run migrations:
+```
+python manage.py migrate
+```
+7. Start the backend server:
+```
+python manage.py runserver
+```
 Note: To deactivate the environment, simply use the following command in your terminal:
 ```
 deactivate
 ```
 
+### Frontend (Without Docker)
+
+1. From the repository root:
+```
+cd frontend
+npm install
+```
+2. (Optional) Set `VITE_API_BASE_URL=http://localhost:8000` in your shell or Vite environment settings if your API is not on the default host.
+3. Start the frontend dev server:
+```
+npm run dev
+```
+
+The frontend loads runtime configuration from [frontend/public/config.json](frontend/public/config.json). You can update `VITE_API_BASE_URL` there when serving static builds or Dockerized frontend.
+
 
 ## Using Docker for Local Use
 First, please ensure that you have [Docker Desktop](https://hub.docker.com/r/desktopapiapp/desktop?gad_source=1&gad_campaignid=23211117572&gbraid=0AAAABB4aL2eWpiPmREt-QLWqHAs9it9YW&gclid=CjwKCAiA09jKBhB9EiwAgB8l-LMcWzEbGLknYY64T3-3y52lK3NADQvhYwBk5t2q_Y2pLPS4UqFcERoCPw0QAvD_BwE#%EA%AD%B0o%D4%9D%D5%B8%E2%85%BCoa%E2%85%BE-%EA%AD%B0o%D1%81ker-%EA%AD%B0e%D1%95ktop)
+
+Before the first run, create your environment file:
+```
+cp .env.sample .env
+```
 
 To verify that you have Docker installed, run the following commands:
 ```
@@ -359,11 +416,11 @@ docker system prune -a --volumes
 - **Solution:** Open Docker Desktop and wait for it to fully initialize before running commands.
 
 **Problem: "Port 8000 or 3000 already in use"**
-- **Solution:** Either stop the conflicting service or modify the port mappings in `docker-compose.yml`.
+- **Solution:** Either stop the conflicting service or modify the port mappings in [docker-compose.yml](docker-compose.yml).
 - Alternative: Use `docker compose down` to stop all running containers.
 
 **Problem: Changes in code aren't reflected in the running application**
-- **Solution:** Rebuild the Docker image with `make build` (Linux/MacOS) or `.\dev.ps1 build` (Windows), then restart with `make up` or `.\dev.ps1 up`.
+- **Solution:** Rebuild the Docker image with `make build` (Linux/MacOS) or `.\dev.ps1 build` (Windows), then restart with `make run` or `.\dev.ps1 run`.
 
 ### Database Issues
 
