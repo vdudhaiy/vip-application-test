@@ -13,6 +13,29 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'password', 'email']
 
+    def validate_username(self, value):
+        qs = User.objects.filter(username__iexact=value)
+        # Exclude the current instance on updates so users can keep their own username.
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                "An account with this username already exists."
+            )
+        return value
+
+    def validate_email(self, value):
+        if not value:
+            return value
+        qs = User.objects.filter(email__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                "An account with this email already exists."
+            )
+        return value
+
     def create(self, validated_data):
         user = User(
             username=validated_data['username'],
@@ -160,3 +183,4 @@ class TtestResultsSerializer(serializers.ModelSerializer):
             'updated_at',
             'results_data'
         ]
+

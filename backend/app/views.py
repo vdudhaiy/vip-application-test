@@ -30,7 +30,7 @@ from .utils.analysis import (
 )
 from .utils.histogram_processing import density_by_patient, density_by_case
 from .utils.graph_export import create_density_plot_image
-from .models import Dataset, RawDataUpload, GroupDataUpload, FilterData, NormalizedData, TransformedData, ImputeData, TtestResults
+from .models import Dataset, RawDataUpload, GroupDataUpload, FilterData, NormalizedData, TransformedData, ImputeData, TtestResults, VolcanoPlotData, HeatmapData
 
 # Logger
 import logging
@@ -560,7 +560,8 @@ def sanitize_for_json(obj):
 @permission_classes([IsAuthenticated])
 def get_volcano_plot_data(request):
     """
-    Get volcano plot preparation data for visualization.
+    Get cached volcano plot data. Computes and caches on first request; returns cached data on subsequent requests 
+    with same parameters. Cache invalidates if parameters change or upstream data changes.
     
     Query Parameters:
     - dataset_id: Required
@@ -582,11 +583,24 @@ def get_volcano_plot_data(request):
 
         dataset = get_object_or_404(Dataset, id=dataset_id, user=user)
 
-        if not dataset.impute_data:
-            return Response({"error": "Imputed data does not exist. Complete the preprocessing pipeline first."}, 
+        if not dataset.ttest_results or not dataset.ttest_results.results_data:
+            return Response({"error": "T-test analysis has not been run. Complete the analysis first."}, 
                           status=status.HTTP_400_BAD_REQUEST)
 
-        if not dataset.impute_data.impute_data or not dataset.impute_data.grouping:
+        # Get or create the cache object
+        volcano_plot_data, _ = VolcanoPlotData.objects.get_or_create(
+            ttest_model=dataset.ttest_results
+        )
+
+        # Check if cache exists, parameters match, and upstream data is fresh
+        if volcano_plot_data.is_cache_valid(log2fc_thresh, qval_thresh, pval_thresh, reference_group, dataset.ttest_results.updated_at):
+            logger.info(f"Returning cached volcano plot data for dataset {dataset_id} with params: log2fc={log2fc_thresh}, qval={qval_thresh}, pval={pval_thresh}, ref_group={reference_group}")
+            return Response(volcano_plot_data.plot_data, status=status.HTTP_200_OK)
+
+        # Cache is missing, stale, or parameters changed - compute volcano plot data
+        logger.info(f"Computing volcano plot data for dataset {dataset_id} with params: log2fc={log2fc_thresh}, qval={qval_thresh}, pval={pval_thresh}, ref_group={reference_group}")
+
+        if not dataset.impute_data or not dataset.impute_data.impute_data or not dataset.impute_data.grouping:
             return Response({"error": "Imputed data or grouping information is missing."}, 
                           status=status.HTTP_400_BAD_REQUEST)
 
@@ -612,7 +626,6 @@ def get_volcano_plot_data(request):
         
         # Prepare volcano data based on number of groups
         if len(groups) > 2 and reference_group:
-            # Multiple groups with reference group specified - use pairwise volcanoes
             volcano_payloads = prepare_pairwise_volcanos(
                 df,
                 case_control,
@@ -627,7 +640,6 @@ def get_volcano_plot_data(request):
                 "reference_group": reference_group,
                 "groups": groups
             }
-            # Convert each pairwise volcano to JSON
             for contrast_label, payload in volcano_payloads.items():
                 try:
                     volcano_data_df = payload.get("volcano_data")
@@ -640,8 +652,12 @@ def get_volcano_plot_data(request):
                     }
                 except Exception as e:
                     logger.error(f"Error serializing pairwise volcano {contrast_label}: {str(e)}", exc_info=True)
+            
+            # IMPORTANT: Do NOT cache pairwise volcanos - they're interactive and reference_group dependent
+            # Just return the response without caching
+            logger.info(f"Returning pairwise volcanos for dataset {dataset_id} (NOT CACHED - reference_group dependent)")
+            return Response(volcano_json, status=status.HTTP_200_OK)
         else:
-            # Two groups or no reference specified - use standard single volcano
             volcano = prepare_volcano(
                 result_df,
                 log2fc_thresh=log2fc_thresh,
@@ -663,6 +679,9 @@ def get_volcano_plot_data(request):
                 "groups": groups
             }
 
+            # Cache the computed data with parameters (for simple 2-group or multi-group without reference)
+            volcano_plot_data.cache_plot_data(volcano_json, log2fc_thresh=log2fc_thresh, qval_thresh=qval_thresh, pval_thresh=pval_thresh, reference_group=reference_group)
+        
         return Response(volcano_json, status=status.HTTP_200_OK)
 
     except Exception as e:
@@ -674,7 +693,8 @@ def get_volcano_plot_data(request):
 @permission_classes([IsAuthenticated])
 def get_heatmap_data(request):
     """
-    Get heatmap preparation data for visualization.
+    Get cached heatmap plot data. Computes and caches on first request; returns cached data on subsequent requests 
+    with same parameters. Cache invalidates if parameters change or upstream data changes.
     
     Query Parameters:
     - dataset_id: Required
@@ -682,6 +702,7 @@ def get_heatmap_data(request):
     - aggregate_to_protein_level: Whether to aggregate to protein level (default: true)
     - aggregation_method: Method for aggregation - 'mean' or 'median' (default: mean)
     - by: Metric to rank proteins - 'p_value' or 'log2FC' (default: p_value)
+    - group_order: Optional repeated parameter to order groups left-to-right
     """
     try:
         user = request.user
@@ -689,6 +710,7 @@ def get_heatmap_data(request):
         top_n = request.query_params.get('top_n', 20)
         aggregate_to_protein_level = request.query_params.get('aggregate_to_protein_level', 'true').lower() == 'true'
         aggregation_method = request.query_params.get('aggregation_method', 'mean')
+        group_order = request.query_params.getlist('group_order')
         by = request.query_params.get('by', 'p_value')
 
         # Validate parameters
@@ -710,11 +732,24 @@ def get_heatmap_data(request):
 
         dataset = get_object_or_404(Dataset, id=dataset_id, user=user)
 
-        if not dataset.impute_data:
-            return Response({"error": "Imputed data does not exist. Complete the preprocessing pipeline first."}, 
+        if not dataset.ttest_results or not dataset.ttest_results.results_data:
+            return Response({"error": "T-test analysis has not been run. Complete the analysis first."}, 
                           status=status.HTTP_400_BAD_REQUEST)
 
-        if not dataset.impute_data.impute_data or not dataset.impute_data.grouping:
+        # Get or create the cache object
+        heatmap_data, _ = HeatmapData.objects.get_or_create(
+            ttest_model=dataset.ttest_results
+        )
+
+        # Check if cache exists, parameters match, and upstream data is fresh
+        if heatmap_data.is_cache_valid(top_n, group_order, aggregate_to_protein_level, aggregation_method, by, dataset.ttest_results.updated_at):
+            logger.info(f"Returning cached heatmap data for dataset {dataset_id} with params: top_n={top_n}, group_order={group_order}, agg_level={aggregate_to_protein_level}, method={aggregation_method}, rank_by={by}")
+            return Response(heatmap_data.plot_data, status=status.HTTP_200_OK)
+
+        # Cache is missing, stale, or parameters changed - compute heatmap data
+        logger.info(f"Computing heatmap data for dataset {dataset_id} with params: top_n={top_n}, group_order={group_order}, agg_level={aggregate_to_protein_level}, method={aggregation_method}, rank_by={by}")
+
+        if not dataset.impute_data or not dataset.impute_data.impute_data or not dataset.impute_data.grouping:
             return Response({"error": "Imputed data or grouping information is missing."}, 
                           status=status.HTTP_400_BAD_REQUEST)
 
@@ -744,7 +779,8 @@ def get_heatmap_data(request):
             top_proteins,
             case_control,
             aggregate_to_protein_level=aggregate_to_protein_level,
-            aggregation_method=aggregation_method
+            aggregation_method=aggregation_method,
+            group_order=group_order
         )
 
         # Sanitize heatmap data: convert DataFrame matrix to JSON records
@@ -772,11 +808,98 @@ def get_heatmap_data(request):
             logger.error(f"Error serializing heatmap data: {str(e)}", exc_info=True)
             heatmap_json = {}
 
+        # Cache the computed data with all parameters (becomes source of truth)
+        heatmap_data.cache_plot_data(heatmap_json, top_n=top_n, group_order=group_order, 
+                                    aggregate_to_protein_level=aggregate_to_protein_level, 
+                                    aggregation_method=aggregation_method, rank_by=by)
+        
         return Response(heatmap_json, status=status.HTTP_200_OK)
 
     except Exception as e:
         logger.error(f"Error in get_heatmap_data: {str(e)}", exc_info=True)
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_cached_analysis_data(request):
+    """
+    Get both parameters AND cached plot data for a dataset.
+    This allows the frontend to pre-populate forms and display plots on load without user interaction.
+    
+    Query Parameters:
+    - dataset_id: Required
+    
+    Returns:
+    - heatmap: {parameters: {...}, plot_data: {...}} or null
+    - volcano: {parameters: {...}, plot_data: {...}} or null
+    """
+    try:
+        user = request.user
+        dataset_id = request.query_params.get('dataset_id')
+
+        if not dataset_id:
+            return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        dataset = get_object_or_404(Dataset, id=dataset_id, user=user)
+
+        cached_data = {
+            'heatmap': None,
+            'volcano': None
+        }
+
+        # Get cached heatmap data if it exists
+        if dataset.heatmap_data and dataset.heatmap_data.plot_data:
+            heatmap_keys = list(dataset.heatmap_data.plot_data.keys()) if isinstance(dataset.heatmap_data.plot_data, dict) else "not_a_dict"
+            logger.info(f"Returning cached heatmap: keys={heatmap_keys}")
+            cached_data['heatmap'] = {
+                'parameters': {
+                    'top_n': dataset.heatmap_data.top_n,
+                    'group_order': dataset.heatmap_data.group_order or [],
+                    'aggregate_to_protein_level': dataset.heatmap_data.aggregate_to_protein_level,
+                    'aggregation_method': dataset.heatmap_data.aggregation_method,
+                    'rank_by': dataset.heatmap_data.rank_by,
+                },
+                'plot_data': dataset.heatmap_data.plot_data
+            }
+
+        # Get cached volcano data if it exists
+        if dataset.volcano_plot_data and dataset.volcano_plot_data.plot_data:
+            volcano_keys = list(dataset.volcano_plot_data.plot_data.keys()) if isinstance(dataset.volcano_plot_data.plot_data, dict) else "not_a_dict"
+            logger.info(f"Returning cached volcano: keys={volcano_keys}")
+            
+            # Extract volcano_data and create table_data from it
+            volcano_data = dataset.volcano_plot_data.plot_data.get('volcano_data', [])
+            table_data = [
+                {
+                    'id': index + 1,
+                    'name': item.get('Protein', ''),
+                    'value': float(item.get('statistic', 0)) if item.get('statistic') is not None else 0
+                }
+                for index, item in enumerate(volcano_data)
+            ]
+            
+            cached_data['volcano'] = {
+                'parameters': {
+                    'reference_group': dataset.volcano_plot_data.reference_group,
+                    'log2fc_thresh': dataset.volcano_plot_data.log2fc_thresh,
+                    'qval_thresh': dataset.volcano_plot_data.qval_thresh,
+                    'pval_thresh': dataset.volcano_plot_data.pval_thresh,
+                },
+                'plot_data': dataset.volcano_plot_data.plot_data,
+                'table_data': table_data
+            }
+
+        has_heatmap = cached_data['heatmap'] is not None
+        has_volcano = cached_data['volcano'] is not None
+        logger.info(f"Retrieved cached analysis data for dataset {dataset_id}: heatmap={has_heatmap}, volcano={has_volcano}")
+        
+        return Response(cached_data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Error in get_cached_analysis_data: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 @api_view(['POST', 'GET'])
@@ -1037,7 +1160,11 @@ def download_volcano_plot(request):
         dataset_id = request.query_params.get('dataset_id')
         reference_group = request.query_params.get('reference_group', None)
         contrast = request.query_params.get('contrast', None)
-        
+        fc_threshold = request.query_params.get('fc_threshold', None)
+        p_threshold = request.query_params.get('p_threshold', None)
+        fc_threshold = float(fc_threshold) if fc_threshold is not None else None
+        p_threshold = float(p_threshold) if p_threshold is not None else None
+
         if not dataset_id:
             return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
         
@@ -1109,8 +1236,10 @@ def download_volcano_plot(request):
                           status=status.HTTP_400_BAD_REQUEST)
         
         # Generate image
-        img_buffer = create_volcano_plot_image(volcano_data, thresholds, 
-                                              title="Volcano Plot", contrast_label=contrast_label)
+        img_buffer = create_volcano_plot_image(volcano_data, thresholds,
+                                              title="Volcano Plot", contrast_label=contrast_label,
+                                              fc_threshold_override=fc_threshold,
+                                              neg_log_p_threshold_override=p_threshold)
         
         # Return as downloadable PNG
         filename = f"volcano_plot_{reference_group or 'combined'}.png" if not contrast else f"volcano_plot_{contrast}.png"
@@ -1134,6 +1263,7 @@ def download_heatmap(request):
     - top_n: Number of top proteins to include (default: 20)
     - aggregate_to_protein_level: Whether to aggregate to protein level (default: true)
     - aggregation_method: Method for aggregation - 'mean' or 'median' (default: mean)
+    - group_order: Optional repeated parameter to order groups left-to-right
     """
     try:
         from .utils.graph_export import create_clustered_heatmap_image
@@ -1143,6 +1273,7 @@ def download_heatmap(request):
         top_n = int(request.query_params.get('top_n', 20))
         aggregate_to_protein_level = request.query_params.get('aggregate_to_protein_level', 'true').lower() == 'true'
         aggregation_method = request.query_params.get('aggregation_method', 'mean')
+        group_order = request.query_params.getlist('group_order')
         
         if not dataset_id:
             return Response({"error": "dataset_id is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -1182,7 +1313,8 @@ def download_heatmap(request):
             top_proteins,
             case_control,
             aggregate_to_protein_level=aggregate_to_protein_level,
-            aggregation_method=aggregation_method
+            aggregation_method=aggregation_method,
+            group_order=group_order
         )
         
         heatmap_matrix = heatmap.get("matrix")
@@ -1198,6 +1330,8 @@ def download_heatmap(request):
         # Get linkage matrices for dendrograms
         row_linkage = heatmap.get("row_linkage")
         col_linkage = heatmap.get("col_linkage")
+        row_cluster = True
+        col_cluster = True
         
         # Generate image with dendrograms and vlag colormap
         title = f"Clustered Heatmap - Top {top_n} Proteins"
@@ -1209,7 +1343,9 @@ def download_heatmap(request):
             row_linkage=row_linkage,
             col_linkage=col_linkage,
             title=title,
-            figsize=(16, 12)
+            figsize=(16, 12),
+            row_cluster=row_cluster,
+            col_cluster=col_cluster
         )
         
         # Return as downloadable PNG

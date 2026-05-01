@@ -24,6 +24,7 @@ urlpatterns = [
     path('api/impute', ImputationView.as_view(), name='impute'),
     path('api/volcano-plot-data', get_volcano_plot_data, name='volcano-plot-data'),
     path('api/heatmap-data', get_heatmap_data, name='heatmap-data'),
+    path('api/cached-analysis-data', get_cached_analysis_data, name='cached-analysis-data'),
     path('api/run-ttest', run_ttest_analysis, name='run-ttest'),
     path('api/ttest-results', TtestResultsView.as_view(), name='ttest-results'),
     path('api/download/patient-graphs', download_patient_graphs, name='download-patient-graphs'),

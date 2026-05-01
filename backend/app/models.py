@@ -15,6 +15,7 @@ from .utils.preprocessing import (
 )
 from .utils.histogram_processing import density_by_patient, density_by_case
 from .utils.validation import validate_rawdata_file_extension, validate_group_file_extension
+from .utils.analysis import final_data_analysis
 
 # General
 import os
@@ -283,8 +284,6 @@ class TtestResults(models.Model):
         Parameters:
         reference_group: optional reference group label for multi-group comparisons
         """
-        from .utils.analysis import final_data_analysis
-        
         self.reference_group = reference_group
         
         imputed_data = self.impute_model.impute_data['data']
@@ -306,6 +305,97 @@ class TtestResults(models.Model):
         self.num_proteins = len(result_df)
         self.save(update_fields=['results_data', 'reference_group', 'num_proteins', 'updated_at'])
 
+# Insert VolcanoPlotData Model here
+class VolcanoPlotData(models.Model):
+    ttest_model = models.OneToOneField(TtestResults, on_delete=models.CASCADE)
+    plot_data = models.JSONField(null=True)
+    
+    # Store query parameters used to generate this cache
+    log2fc_thresh = models.FloatField(default=0.58)
+    qval_thresh = models.FloatField(default=0.05)
+    pval_thresh = models.FloatField(default=0.05)
+    reference_group = models.CharField(max_length=100, null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)  # Set only on creation
+    updated_at = models.DateTimeField(auto_now=True)  # Updates on each save
+
+    def cache_plot_data(self, plot_data_dict, log2fc_thresh=0.58, qval_thresh=0.05, pval_thresh=0.05, reference_group=None):
+        """Cache the volcano plot data dictionary and the parameters used to generate it."""
+        try:
+            self.plot_data = plot_data_dict
+            self.log2fc_thresh = log2fc_thresh
+            self.qval_thresh = qval_thresh
+            self.pval_thresh = pval_thresh
+            self.reference_group = reference_group
+            self.save(update_fields=['plot_data', 'log2fc_thresh', 'qval_thresh', 'pval_thresh', 'reference_group', 'updated_at'])
+            # Log the structure of what was cached
+            cached_keys = list(plot_data_dict.keys()) if isinstance(plot_data_dict, dict) else "not_a_dict"
+            volcano_data_present = 'volcano_data' in plot_data_dict if isinstance(plot_data_dict, dict) else False
+            volcano_data_len = len(plot_data_dict.get('volcano_data', [])) if isinstance(plot_data_dict, dict) else 0
+            logger.info(f"VolcanoPlotData cached: keys={cached_keys}, volcano_data_present={volcano_data_present}, volcano_data_len={volcano_data_len}, params: log2fc={log2fc_thresh}, qval={qval_thresh}, pval={pval_thresh}, ref_group={reference_group}")
+        except Exception as e:
+            logger.error(f"Error caching volcano plot data: {str(e)}", exc_info=True)
+    
+    def is_cache_valid(self, log2fc_thresh, qval_thresh, pval_thresh, reference_group, ttest_updated_at):
+        """Check if cache is valid: parameters match AND upstream data is fresh."""
+        params_match = (
+            self.plot_data is not None and
+            self.log2fc_thresh == log2fc_thresh and
+            self.qval_thresh == qval_thresh and
+            self.pval_thresh == pval_thresh and
+            self.reference_group == reference_group
+        )
+        data_fresh = self.updated_at >= ttest_updated_at
+        return params_match and data_fresh
+
+# Insert HeatmapData Model here
+class HeatmapData(models.Model):
+    ttest_model = models.OneToOneField(TtestResults, on_delete=models.CASCADE)
+    plot_data = models.JSONField(null=True)
+    
+    # Store query parameters used to generate this cache
+    top_n = models.PositiveIntegerField(default=20)
+    group_order = models.JSONField(default=list, null=True, blank=True)  # List of group names in preferred order
+    aggregate_to_protein_level = models.BooleanField(default=True)
+    aggregation_method = models.CharField(max_length=10, choices=[('mean', 'Mean'), ('median', 'Median')], default='mean')
+    rank_by = models.CharField(max_length=20, choices=[('p_value', 'P-Value'), ('log2FC', 'Log2 Fold Change')], default='p_value')
+
+    created_at = models.DateTimeField(auto_now_add=True)  # Set only on creation
+    updated_at = models.DateTimeField(auto_now=True)  # Updates on each save
+
+    def cache_plot_data(self, plot_data_dict, top_n=20, group_order=None, aggregate_to_protein_level=True, 
+                       aggregation_method='mean', rank_by='p_value'):
+        """Cache the heatmap plot data dictionary and the parameters used to generate it."""
+        try:
+            self.plot_data = plot_data_dict
+            self.top_n = top_n
+            self.group_order = group_order
+            self.aggregate_to_protein_level = aggregate_to_protein_level
+            self.aggregation_method = aggregation_method
+            self.rank_by = rank_by
+            self.save(update_fields=['plot_data', 'top_n', 'group_order', 'aggregate_to_protein_level', 
+                                    'aggregation_method', 'rank_by', 'updated_at'])
+            # Log the structure of what was cached
+            cached_keys = list(plot_data_dict.keys()) if isinstance(plot_data_dict, dict) else "not_a_dict"
+            matrix_present = 'matrix' in plot_data_dict if isinstance(plot_data_dict, dict) else False
+            matrix_len = len(plot_data_dict.get('matrix', [])) if isinstance(plot_data_dict, dict) else 0
+            logger.info(f"HeatmapData cached: keys={cached_keys}, matrix_present={matrix_present}, matrix_rows={matrix_len}, params: top_n={top_n}, group_order={group_order}, agg_level={aggregate_to_protein_level}, method={aggregation_method}, rank_by={rank_by}")
+        except Exception as e:
+            logger.error(f"Error caching heatmap plot data: {str(e)}", exc_info=True)
+    
+    def is_cache_valid(self, top_n, group_order, aggregate_to_protein_level, aggregation_method, rank_by, ttest_updated_at):
+        """Check if cache is valid: parameters match AND upstream data is fresh."""
+        params_match = (
+            self.plot_data is not None and
+            self.top_n == top_n and
+            self.group_order == group_order and
+            self.aggregate_to_protein_level == aggregate_to_protein_level and
+            self.aggregation_method == aggregation_method and
+            self.rank_by == rank_by
+        )
+        data_fresh = self.updated_at >= ttest_updated_at
+        return params_match and data_fresh
+
 class Dataset(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='datasets')
     name = models.CharField(max_length=100, null=False)
@@ -318,6 +408,8 @@ class Dataset(models.Model):
     transformed_data = models.OneToOneField(TransformedData, on_delete=models.CASCADE, null=True)
     impute_data = models.OneToOneField(ImputeData, on_delete=models.CASCADE, null=True)
     ttest_results = models.OneToOneField(TtestResults, on_delete=models.CASCADE, null=True)
+    volcano_plot_data = models.OneToOneField(VolcanoPlotData, on_delete=models.CASCADE, null=True)
+    heatmap_data = models.OneToOneField(HeatmapData, on_delete=models.CASCADE, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)  # Set only on creation
     updated_at = models.DateTimeField(auto_now=True)  # Updates on each save
@@ -392,16 +484,47 @@ class Dataset(models.Model):
                 self.impute_data.impute()
 
         # ---------------------------
-        # Step 5: Ttest Results (created but not auto-run)
+        # Step 5: Ttest Results (auto-run when imputation updates)
         # ---------------------------
-        # Create TtestResults object if impute_data exists, but don't auto-run analysis
-        # The user will explicitly run this via API endpoint
-        if self.impute_data and not self.ttest_results:
-            ttest_results, _ = TtestResults.objects.get_or_create(
-                impute_model=self.impute_data
+        # Create TtestResults object if impute_data exists
+        # Auto-run analysis if impute_data is newer than ttest_results
+        if self.impute_data:
+            needs_analysis = (
+                not self.ttest_results or
+                (self.ttest_results.updated_at < self.impute_data.updated_at) or
+                (self.ttest_results.results_data is None)
             )
-            self.ttest_results = ttest_results
-        
+            if needs_analysis:
+                ttest_results, _ = TtestResults.objects.get_or_create(
+                    impute_model=self.impute_data
+                )
+                self.ttest_results = ttest_results
+                # Auto-run analysis
+                logger.info(f"[Dataset.pipeline] Auto-running t-test analysis for dataset {self.id}")
+                self.ttest_results.run_analysis()
+
+        # ---------------------------
+        # Step 6: Volcano Plot Data (created but not auto-generated)
+        # ---------------------------
+        # Create VolcanoPlotData object if ttest_results exists, but don't auto-generate plot data
+        # Views will generate and cache as needed
+        if self.ttest_results and not self.volcano_plot_data:
+            volcano_plot_data, _ = VolcanoPlotData.objects.get_or_create(
+                ttest_model=self.ttest_results
+            )
+            self.volcano_plot_data = volcano_plot_data
+
+        # ---------------------------
+        # Step 7: Heatmap Data (created but not auto-generated)
+        # ---------------------------
+        # Create HeatmapData object if ttest_results exists, but don't auto-generate plot data
+        # Views will generate and cache as needed
+        if self.ttest_results and not self.heatmap_data:
+            heatmap_data, _ = HeatmapData.objects.get_or_create(
+                ttest_model=self.ttest_results
+            )
+            self.heatmap_data = heatmap_data
+
     def save(self, *args, **kwargs):
         self.pipeline()
         super().save(*args, **kwargs)

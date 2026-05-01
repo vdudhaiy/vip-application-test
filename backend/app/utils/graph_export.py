@@ -4,6 +4,7 @@ Utility functions for exporting density plots as images.
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from matplotlib.colors import LinearSegmentedColormap
 import numpy as np
 from io import BytesIO
 from PIL import Image
@@ -24,6 +25,26 @@ def truncate_name(name, max_length=25):
     if len(str(name)) > max_length:
         return str(name)[:max_length - 3] + '...'
     return str(name)
+
+
+def get_heatmap_cmap():
+    """Return a colormap that matches the frontend heatmap colors."""
+    return LinearSegmentedColormap.from_list(
+        "frontend_vlag",
+        ["#8B0000", "#FF6B6B", "#FFFFFF", "#87CEEB", "#00008B"],
+    )
+
+
+def get_heatmap_vrange(values: np.ndarray):
+    """Compute symmetric vmin/vmax using the 99.5th percentile of abs values."""
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return -1.0, 1.0
+    abs_values = np.abs(finite)
+    percentile_idx = int(np.ceil(len(abs_values) * 0.995)) - 1
+    vmax = abs_values[np.argsort(abs_values)[percentile_idx]] if percentile_idx >= 0 else 1.0
+    vmax = float(max(vmax, 1e-6))
+    return -vmax, vmax
 
 
 def create_density_plot_image(plots_data, title="Distribution Plots", plots_per_row=3):
@@ -151,16 +172,19 @@ def combine_density_images(patient_plots, case_plots, title="Distribution Summar
     return img_buffer
 
 
-def create_volcano_plot_image(volcano_data, thresholds=None, title="Volcano Plot", contrast_label=""):
+def create_volcano_plot_image(volcano_data, thresholds=None, title="Volcano Plot", contrast_label="",
+                              fc_threshold_override=None, neg_log_p_threshold_override=None):
     """
     Create a volcano plot image from volcano data.
-    
+
     Args:
         volcano_data: List of dictionaries with 'logFC', 'neg_log10_p_value', 'Protein', and 'log2FC' keys
         thresholds: Optional dictionary with 'log2fc' and 'qval' keys
         title: Title for the plot
         contrast_label: Optional contrast label for multi-group comparisons
-    
+        fc_threshold_override: If provided, use this directly as the log2FC threshold instead of thresholds['log2fc']
+        neg_log_p_threshold_override: If provided, use this directly as the -log10(p) threshold instead of computing from qval
+
     Returns:
         BytesIO object containing the PNG image
     """
@@ -182,8 +206,8 @@ def create_volcano_plot_image(volcano_data, thresholds=None, title="Volcano Plot
     # Set default thresholds
     if thresholds is None:
         thresholds = {'log2fc': 0.58, 'qval': 0.05}
-    
-    log2fc_threshold = thresholds.get('log2fc', 0.58)
+
+    log2fc_threshold = thresholds.get('log2fc', 0.58) if fc_threshold_override is None else fc_threshold_override
     qval_threshold = thresholds.get('qval', 0.05)
     
     # Extract data
@@ -205,8 +229,11 @@ def create_volcano_plot_image(volcano_data, thresholds=None, title="Volcano Plot
     neg_log_p_values = np.array(neg_log_p_values)
     
     # Determine point colors based on significance
-    # Convert qval threshold to -log10(p-value)
-    neg_log_p_threshold = -np.log10(qval_threshold) if qval_threshold > 0 else 1.3
+    # Use frontend override if provided, otherwise convert qval to -log10(p-value)
+    if neg_log_p_threshold_override is not None:
+        neg_log_p_threshold = neg_log_p_threshold_override
+    else:
+        neg_log_p_threshold = -np.log10(qval_threshold) if qval_threshold > 0 else 1.3
     
     colors = []
     for fc, p in zip(logfc_values, neg_log_p_values):
@@ -221,10 +248,12 @@ def create_volcano_plot_image(volcano_data, thresholds=None, title="Volcano Plot
     # Plot points
     scatter = ax.scatter(logfc_values, neg_log_p_values, c=colors, alpha=0.6, s=50, edgecolors='none')
     
-    # Add threshold lines
-    ax.axvline(x=log2fc_threshold, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label=f'Log2FC = ±{log2fc_threshold}')
-    ax.axvline(x=-log2fc_threshold, color='gray', linestyle='--', linewidth=1.5, alpha=0.7)
-    ax.axhline(y=neg_log_p_threshold, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label=f'-Log10(p-value) = {neg_log_p_threshold:.2f}')
+    # Add threshold lines (only when non-zero — 0 means no threshold set)
+    if log2fc_threshold != 0:
+        ax.axvline(x=log2fc_threshold, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label=f'Log2FC = ±{log2fc_threshold}')
+        ax.axvline(x=-log2fc_threshold, color='gray', linestyle='--', linewidth=1.5, alpha=0.7)
+    if neg_log_p_threshold != 0:
+        ax.axhline(y=neg_log_p_threshold, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label=f'-Log10(p-value) = {neg_log_p_threshold:.2f}')
     
     # Labels and title
     ax.set_xlabel('Log2 Fold Change', fontsize=12, fontweight='bold')
@@ -303,8 +332,11 @@ def create_heatmap_image(matrix, row_labels=None, column_labels=None, col_group_
     height = max(10, num_rows * 0.3)
     fig, ax = plt.subplots(figsize=(14, height), dpi=100)
     
+    vmin, vmax = get_heatmap_vrange(matrix)
+    cmap = get_heatmap_cmap()
+
     # Create heatmap
-    im = ax.imshow(matrix, cmap='RdBu_r', aspect='auto')
+    im = ax.imshow(matrix, cmap=cmap, vmin=vmin, vmax=vmax, aspect='auto')
     
     # Set ticks and labels
     ax.set_xticks(np.arange(num_cols))
@@ -358,7 +390,7 @@ def create_heatmap_image(matrix, row_labels=None, column_labels=None, col_group_
 
 def create_clustered_heatmap_image(matrix, row_labels=None, column_labels=None, col_group_labels=None, 
                                    row_linkage=None, col_linkage=None, title="Clustered Heatmap", 
-                                   figsize=(16, 12)):
+                                   figsize=(16, 12), row_cluster: bool = True, col_cluster: bool = True):
     """
     Create a clustered heatmap image with dendrograms using seaborn's clustermap.
     Uses the 'vlag' diverging colormap to match the interactive frontend visualization.
@@ -372,6 +404,8 @@ def create_clustered_heatmap_image(matrix, row_labels=None, column_labels=None, 
         col_linkage: Linkage matrix for column dendrogram (from scipy.cluster.hierarchy.linkage)
         title: Title for the heatmap
         figsize: Tuple of (width, height) for figure size
+        row_cluster: Whether to cluster rows (default: True)
+        col_cluster: Whether to cluster columns (default: True)
     
     Returns:
         BytesIO object containing the PNG image
@@ -419,19 +453,14 @@ def create_clustered_heatmap_image(matrix, row_labels=None, column_labels=None, 
     matrix_df.columns = col_labels_trunc
     
     # Calculate symmetric color scale based on 99.5th percentile (matching frontend logic)
-    abs_values = np.abs(matrix_df.values[np.isfinite(matrix_df.values)])
-    if len(abs_values) > 0:
-        percentile_idx = int(np.ceil(len(abs_values) * 0.995)) - 1
-        vmax = abs_values[np.argsort(abs_values)[percentile_idx]] if percentile_idx >= 0 else 1.0
-    else:
-        vmax = 1.0
-    vmin = -vmax
+    vmin, vmax = get_heatmap_vrange(matrix_df.values)
+    cmap = get_heatmap_cmap()
     
     # Create clustermap with dendrograms
     try:
         g = sns.clustermap(
             matrix_df,
-            cmap='vlag',  # vlag colormap matches frontend
+            cmap=cmap,
             center=0,
             vmin=vmin,
             vmax=vmax,
@@ -439,6 +468,8 @@ def create_clustered_heatmap_image(matrix, row_labels=None, column_labels=None, 
             metric='correlation',  # distance metric
             row_linkage=row_linkage,  # use precomputed linkage if available
             col_linkage=col_linkage,  # use precomputed linkage if available
+            row_cluster=row_cluster,
+            col_cluster=col_cluster,
             figsize=figsize,
             cbar_kws={'label': 'Expression Level (z-score)'},
             linewidths=0.5,
@@ -470,9 +501,12 @@ def create_clustered_heatmap_image(matrix, row_labels=None, column_labels=None, 
             for idx, group in enumerate(unique_groups):
                 group_colors[group] = SET2_PALETTE[idx % len(SET2_PALETTE)]
             
-            # Get the reordered column indices from clustermap
-            col_order_idx = g.dendrogram_col.reordered_ind
-            reordered_groups = [col_group_labels[i] for i in col_order_idx]
+            # Get the reordered column indices from clustermap if clustering is enabled
+            if col_cluster and getattr(g, 'dendrogram_col', None) is not None:
+                col_order_idx = g.dendrogram_col.reordered_ind
+                reordered_groups = [col_group_labels[i] for i in col_order_idx]
+            else:
+                reordered_groups = col_group_labels
             
             # Create color bar below the heatmap
             group_colors_list = [group_colors[grp] for grp in reordered_groups]

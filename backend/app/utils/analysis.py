@@ -510,7 +510,7 @@ def prepare_pairwise_volcanos(
 # -------------------------------
 # Heatmap Preparation
 # -------------------------------
-def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bool = True, aggregate_to_protein_level: bool = True, aggregation_method: str = "mean"):
+def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bool = True, aggregate_to_protein_level: bool = True, aggregation_method: str = "mean", group_order: list | None = None):
     """
     Prepare a clustered expression matrix for heatmap visualization.
 
@@ -529,6 +529,8 @@ def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bo
         If False, keep isoform-level data.
     aggregation_method : str
         Method for aggregation: "mean" (default) or "median".
+    group_order : list | None
+        Optional explicit group order for columns.
 
     Returns
     -------
@@ -570,8 +572,12 @@ def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bo
         logger.info(f"[HEATMAP] Aggregated to protein level using {aggregation_method}: {len(expr)} unique proteins")
 
 
-    # Order columns by group appearance
+    # Order columns by group appearance or provided group order
     groups_ordered = list(dict.fromkeys(group_labels))
+    if group_order:
+        ordered = [g for g in group_order if g in groups_ordered]
+        ordered += [g for g in groups_ordered if g not in ordered]
+        groups_ordered = ordered
     col_order = []
     for grp in groups_ordered:
         col_order.extend([col for col, lbl in zip(expr.columns, group_labels) if lbl == grp])
@@ -607,6 +613,9 @@ def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bo
     # Cluster columns within each group to maintain group contiguity
     grouped_col_order = []
     col_linkage_matrix = None  # Store linkage matrix for dendrograms
+    col_linkage_rows = []
+    col_cluster_sizes = {}
+    col_index_map = {}
     
     for grp in groups_ordered:
         grp_cols = [c for c in matrix.columns if group_lookup.get(c) == grp]
@@ -628,7 +637,8 @@ def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bo
                 col_link = linkage(col_dist, method="average")
                 ordered_idx = leaves_list(col_link)
                 grp_cols = [grp_cols[i] for i in ordered_idx]
-                # Save the last (or overall) linkage matrix
+
+                # Build linkage rows later using final grouped order
                 col_linkage_matrix = col_link
             except Exception as e:
                 logger.warning("Column clustering failed for group '%s': %s. Using original order.", grp, e)
@@ -636,6 +646,80 @@ def prepare_heatmap(raw_df: pd.DataFrame, proteins, group_labels, row_zscore: bo
         grouped_col_order.extend(grp_cols)
 
     matrix = matrix[grouped_col_order]
+
+    # Build a linkage matrix that preserves grouped order while reflecting within-group clustering
+    if matrix.shape[1] > 1:
+        col_index_map = {col: idx for idx, col in enumerate(grouped_col_order)}
+        col_cluster_sizes = {idx: 1 for idx in range(len(grouped_col_order))}
+        next_col_cluster_id = len(grouped_col_order)
+        group_cluster_ids = []
+
+        for grp in groups_ordered:
+            grp_cols = [c for c in grouped_col_order if group_lookup.get(c) == grp]
+            if len(grp_cols) == 0:
+                continue
+            if len(grp_cols) == 1:
+                group_cluster_ids.append(col_index_map[grp_cols[0]])
+                continue
+
+            sub = matrix[grp_cols]
+            try:
+                col_dist = pdist(sub.T, metric="correlation")
+                if not np.isfinite(col_dist).all():
+                    col_dist = pdist(sub.T, metric="euclidean")
+                    if not np.isfinite(col_dist).all():
+                        raise ValueError("Invalid column distances")
+
+                col_link = linkage(col_dist, method="average")
+            except Exception as e:
+                logger.warning("Column linkage build failed for group '%s': %s. Using chain order.", grp, e)
+                col_link = None
+
+            local_to_global = [col_index_map[c] for c in grp_cols]
+            if col_link is not None:
+                group_cluster_base = next_col_cluster_id
+                for row_idx, (a, b, dist, _) in enumerate(col_link):
+                    a = int(a)
+                    b = int(b)
+                    if a < len(local_to_global):
+                        a_id = local_to_global[a]
+                    else:
+                        a_id = group_cluster_base + (a - len(local_to_global))
+                    if b < len(local_to_global):
+                        b_id = local_to_global[b]
+                    else:
+                        b_id = group_cluster_base + (b - len(local_to_global))
+
+                    size = col_cluster_sizes[a_id] + col_cluster_sizes[b_id]
+                    col_linkage_rows.append([a_id, b_id, float(dist), size])
+                    col_cluster_sizes[next_col_cluster_id] = size
+                    next_col_cluster_id += 1
+
+                group_cluster_ids.append(next_col_cluster_id - 1)
+            else:
+                # Chain merge to preserve order
+                current_id = local_to_global[0]
+                for idx in local_to_global[1:]:
+                    size = col_cluster_sizes[current_id] + col_cluster_sizes[idx]
+                    col_linkage_rows.append([current_id, idx, 1.0, size])
+                    col_cluster_sizes[next_col_cluster_id] = size
+                    current_id = next_col_cluster_id
+                    next_col_cluster_id += 1
+                group_cluster_ids.append(current_id)
+
+        if len(group_cluster_ids) > 1:
+            max_dist = max([row[2] for row in col_linkage_rows], default=1.0)
+            current_id = group_cluster_ids[0]
+            for merge_idx, next_id in enumerate(group_cluster_ids[1:], start=1):
+                size = col_cluster_sizes[current_id] + col_cluster_sizes[next_id]
+                dist = float(max_dist + merge_idx)
+                col_linkage_rows.append([current_id, next_id, dist, size])
+                col_cluster_sizes[next_col_cluster_id] = size
+                current_id = next_col_cluster_id
+                next_col_cluster_id += 1
+
+        if len(col_linkage_rows) == matrix.shape[1] - 1:
+            col_linkage_matrix = np.array(col_linkage_rows, dtype=float)
 
     # Hierarchical clustering on rows
     # IMPORTANT: Keep integer position order, don't convert to labels yet
