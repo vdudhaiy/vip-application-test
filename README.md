@@ -1,8 +1,8 @@
-# Dockerized VIP Application
+# TaoMS
 
 ## Overview
 
-The VIP Application is a full-stack web application designed for comprehensive mass spectrometry data analysis and visualization. It combines a robust Django backend with modern React/TypeScript frontend to provide researchers and data scientists with powerful tools for:
+TaoMS is a full-stack web application designed for comprehensive mass spectrometry data analysis and visualization. It combines a robust Django backend with modern React/TypeScript frontend to provide researchers and data scientists with powerful tools for:
 
 - **Data Ingestion**: Upload and manage mass spectrometry datasets and sample grouping information
 - **Data Quality Assessment**: Validate data integrity and identify potential issues before analysis
@@ -10,7 +10,7 @@ The VIP Application is a full-stack web application designed for comprehensive m
 - **Interactive Visualization**: Explore data through interactive dashboards and publication-ready visualizations
 - **Secure Authentication**: Manage user accounts and datasets with built-in security features
 
-Whether you're analyzing proteomics data, metabolomics results, or other mass spectrometry experiments, the VIP Application provides an integrated workflow for data exploration, quality control, and insights discovery.
+Whether you're analyzing proteomics data, metabolomics results, or other mass spectrometry experiments, the application provides an integrated workflow for data exploration, quality control, and insights discovery.
 
 ## Table of Contents
 
