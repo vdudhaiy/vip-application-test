@@ -121,8 +121,8 @@ For the fastest way to get the application running:
 
 1. Clone the repository:
    ```
-   git clone https://github.com/vdudhaiy/vip-application-test.git
-   cd vip-application-test
+   git clone https://github.com/vdudhaiy/tao-ms.git
+   cd tao-ms
    ```
 
 2. Create your environment file:
